@@ -14,7 +14,8 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body {
-  background: var(--page);
+  /* Tiled star image; black shows while it loads or if it's missing. */
+  background: var(--page) url("background.jpg") repeat;
   color: var(--ink);
   font: 16px/1.5 "Courier New", Courier, monospace;
   text-align: center;

@@ -18,12 +18,14 @@ window.GAMES = [
   {
     id: "acid-factory",
     title: "Acid Factory",
-    file: "games/acidfactory.swf"
+    file: "games/acidfactory.swf",
+    blurb: "Don't fall in!"
   },
   {
     id: "amberial",
     title: "Amberial",
-    file: "games/amberial.swf"
+    file: "games/amberial.swf",
+    blurb: "Momentum-based platformer."
   },
   {
     id: "anime-face-maker",
@@ -40,7 +42,8 @@ window.GAMES = [
   {
     id: "cheese-dreams",
     title: "Cheese Dreams",
-    file: "games/Cheese_Dreams.swf"
+    file: "games/Cheese_Dreams.swf",
+    blurb: "Bouncy cheesy and a little platformy."
   },
   {
     id: "cover-orange",
@@ -52,7 +55,7 @@ window.GAMES = [
     id: "cover-orange-2",
     title: "Cover Orange 2",
     file: "games/coverorange2.swf",
-    blurb: "Shield the oranges from the toxic cloud."
+    blurb: "Shield the oranges from the toxic cloud, again!"
   },
   {
     id: "dragon-maker",
@@ -64,13 +67,13 @@ window.GAMES = [
     id: "fancy-pants-1",
     title: "Fancy Pants Adventures: World 1",
     file: "games/FPAWorld1.swf",
-    blurb: "Fast, flowing stick-figure platforming."
+    blurb: "He's fast, he's fearless... and he's got Fancy Pants!"
   },
   {
     id: "fancy-pants-2",
     title: "Fancy Pants Adventures: World 2",
     file: "games/FPAWorld2.swf",
-    blurb: "Fast, flowing stick-figure platforming."
+    blurb: "The Adventures of Fancy Pants Man 2: Electric Boogaloo!"
   },
   {
     id: "fireboy-watergirl-forest-temple",
@@ -81,13 +84,14 @@ window.GAMES = [
   {
     id: "flip-man",
     title: "Flip Man",
-    file: "games/FLIP-MAN-GAME.swf"
+    file: "games/FLIP-MAN-GAME.swf",
+    blurb: "Flip that man!"
   },
   {
     id: "learn-to-fly",
     title: "Learn to Fly",
     file: "games/learn-to-fly.swf",
-    blurb: "Launch a penguin, buy upgrades, fly farther."
+    blurb: "Launch a penguin, buy upgrades, learn! To! Fly!"
   },
   {
     id: "my-new-room",
@@ -105,12 +109,13 @@ window.GAMES = [
     id: "pokemon-towering-legends",
     title: "Pokémon Towering Legends",
     file: "games/pokemon-towering-legends.swf",
-    blurb: "Pokémon fan tower defense."
+    blurb: "Pokémon fan tower-building-time-tester!"
   },
   {
     id: "powerpuff-girls-puppybots",
     title: "The Powerpuff Girls: Attack of the Puppybots",
-    file: "games/the_powerpuff_girls___attack_of_the_puppybots_by_oldadobeflashgames01_de16186.swf"
+    file: "games/the_powerpuff_girls___attack_of_the_puppybots_by_oldadobeflashgames01_de16186.swf",
+    blurb: "Beat this bullet-mania as Bubbles, Blossom, and Buttercup."
   },
   {
     id: "red-ball",
@@ -128,19 +133,19 @@ window.GAMES = [
     id: "rubble-trouble-moscow",
     title: "Rubble Trouble: Moscow",
     file: "games/Rubble_Trouble_Moscow.swf",
-    blurb: "Demolish buildings with explosives."
+    blurb: "гул!!! гул!!! гул!!!."
   },
   {
     id: "rubble-trouble-new-york",
     title: "Rubble Trouble: New York",
     file: "games/Rubble_Trouble_New_York.swf",
-    blurb: "Demolish buildings with explosives."
+    blurb: "BOOM!!! BOOSH!!! BADOOOOOOOM!!!."
   },
   {
     id: "rubble-trouble-tokyo",
     title: "Rubble Trouble: Tokyo",
     file: "games/Rubble_Trouble_Tokyo.swf",
-    blurb: "Demolish buildings with explosives."
+    blurb: "EXPLOSIONS!!! BUILDINGS!!! MASS DESTRUCTION!!!."
   },
   {
     id: "skywire",
@@ -151,13 +156,14 @@ window.GAMES = [
   {
     id: "toxic-2",
     title: "Toxic 2",
-    file: "games/Toxic_2.swf"
+    file: "games/Toxic_2.swf",
+    blurb: "That's... a lot of goo."
   },
   {
     id: "unfair-mario",
     title: "Unfair Mario",
     file: "games/unfair_mario.swf",
-    blurb: "A Mario-style platformer full of nasty traps."
+    blurb: "A Mario-style platformer with a few surprises along the way."
   },
   {
     id: "vvvvvv",
