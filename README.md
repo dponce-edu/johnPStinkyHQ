@@ -1,2 +1,2 @@
-# john.p.stinky.HQ
+# Club Escapade
 Doofenshmirtz Evil Inc.
