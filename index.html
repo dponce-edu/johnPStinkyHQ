@@ -25,13 +25,6 @@
   var grid = document.getElementById("grid");
   var games = window.GAMES || [];
 
-  // Placeholder colour picked from the title, so each game keeps the same one.
-  function colourFor(text) {
-    var h = 0;
-    for (var i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) % 360;
-    return "hsl(" + h + " 55% 38%)";
-  }
-
   function initials(title) {
     var words = title.trim().split(/\s+/);
     var s = words.length > 1 ? words[0][0] + words[1][0] : title.slice(0, 2);
@@ -41,7 +34,6 @@
   function placeholder(game) {
     var ph = document.createElement("div");
     ph.className = "ph";
-    ph.style.background = colourFor(game.title);
     ph.textContent = initials(game.title);
     return ph;
   }
