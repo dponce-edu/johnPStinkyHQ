@@ -1,0 +1,32 @@
+# systemd service: starts the comments server at boot and restarts it if it crashes.
+# Install:  sudo cp server/club-escapade.service /etc/systemd/system/
+#           sudo systemctl daemon-reload && sudo systemctl enable --now club-escapade
+# Logs:     journalctl -u club-escapade -f
+
+[Unit]
+Description=Club Escapade accounts, comments and ratings
+After=network.target
+
+[Service]
+User=clubescapade
+Group=clubescapade
+WorkingDirectory=/srv/club-escapade/site
+ExecStart=/usr/bin/python3 /srv/club-escapade/site/server/app.py --db /var/lib/club-escapade/club.db serve
+Restart=on-failure
+RestartSec=3
+
+# Creates /var/lib/club-escapade owned by the service user, for the database.
+StateDirectory=club-escapade
+
+# Lock the process down: it can only write to its database folder.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

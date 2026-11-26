@@ -55,6 +55,7 @@
 
     var info = document.createElement("div");
     info.className = "info";
+    info.dataset.game = game.id;
     var h2 = document.createElement("h2");
     h2.textContent = game.title;
     info.appendChild(h2);
@@ -71,6 +72,27 @@
   });
 
   if (!games.length) document.getElementById("empty").hidden = false;
+
+  // Average ratings from the comments server, if it's running.
+  fetch("/api/ratings", { credentials: "same-origin" })
+    .then(function (res) {
+      var type = res.headers.get("Content-Type") || "";
+      return res.ok && type.indexOf("application/json") !== -1 ? res.json() : null;
+    })
+    .then(function (data) {
+      if (!data) return;
+      Object.keys(data.ratings).forEach(function (id) {
+        var info = grid.querySelector('.info[data-game="' + id + '"]');
+        if (!info) return;
+        var r = data.ratings[id];
+        var p = document.createElement("p");
+        p.className = "rating";
+        p.textContent = "★ " + r.avg.toFixed(1) + " (" + r.count + ")";
+        p.setAttribute("aria-label", "Rated " + r.avg.toFixed(1) + " out of 5 by " + r.count);
+        info.appendChild(p);
+      });
+    })
+    .catch(function () { /* no server: no ratings shown */ });
 </script>
 </body>
 </html>
