@@ -148,7 +148,7 @@ a:focus-visible, button:focus-visible {
 }
 button {
   font: inherit;
-  text-shadow: inherit;
+  text-shadow: none; /* filled buttons (Restart): black text, no outline */
   font-weight: 600;
   background: var(--accent);
   color: var(--accent-ink);
@@ -160,5 +160,21 @@ button {
 button.quiet {
   background: transparent;
   color: var(--ink);
+  text-shadow: inherit; /* green text on the stars keeps its outline */
   box-shadow: inset 0 0 0 2px var(--bezel);
 }
+
+/* ---------- Restart confirmation pop-up ---------- */
+dialog {
+  background: var(--page);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  max-width: min(90vw, 26rem);
+  font: inherit;
+  text-shadow: inherit;
+  text-align: center;
+}
+dialog p { margin: 0; }
+dialog::backdrop { background: rgba(0, 0, 0, .7); }

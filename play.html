@@ -26,6 +26,16 @@
   </div>
 </div>
 
+<dialog id="confirm-restart">
+  <form method="dialog">
+    <p>Are you sure you want to restart this game?</p>
+    <div class="controls">
+      <button value="yes">Restart</button>
+      <button value="no" class="quiet" autofocus>Cancel</button>
+    </div>
+  </form>
+</dialog>
+
 <!-- Ruffle: loads from a CDN. To host it yourself, download a release from
      https://ruffle.rs/downloads and point this src at the local ruffle.js -->
 <script src="https://unpkg.com/@ruffle-rs/ruffle"></script>
@@ -87,8 +97,18 @@
   var id = new URLSearchParams(location.search).get("game");
   var game = (window.GAMES || []).filter(function (g) { return g.id === id; })[0];
 
+  // Restart asks first. Cancel, Esc or clicking outside the box does nothing.
+  var confirmBox = document.getElementById("confirm-restart");
   document.getElementById("reload").addEventListener("click", function () {
-    if (last) play(last.source, last.label);
+    if (!last) return;
+    confirmBox.returnValue = "";
+    confirmBox.showModal();
+  });
+  confirmBox.addEventListener("close", function () {
+    if (confirmBox.returnValue === "yes" && last) play(last.source, last.label);
+  });
+  confirmBox.addEventListener("click", function (e) {
+    if (e.target === confirmBox) confirmBox.close(); // clicked the dimmed backdrop
   });
 
   document.getElementById("full").addEventListener("click", function () {
