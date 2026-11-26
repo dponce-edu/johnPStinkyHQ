@@ -10,7 +10,8 @@
 //   blurb  optional one-line description on the card
 //   thumb  optional image path. If left out, the site looks for thumbs/<id>.png,
 //          and shows a placeholder until that file exists.
-//   ratio  optional player shape as "width / height" (default "4 / 3")
+//   ratio  optional player shape as "width / height". Usually not needed: the
+//          player sizes itself to the game once it loads.
 //
 // Don't rename or move a .swf once people have played it: saves are tied to its path.
 
@@ -98,12 +99,6 @@ window.GAMES = [
     title: "My New Room",
     file: "games/my_new_room_girlsgogames_com_v1_01.swf",
     blurb: "Decorate a room your way."
-  },
-  {
-    id: "papa-louie",
-    title: "Papa Louie: When Pizzas Attack!",
-    file: "games/papalouie_miniclip.swf",
-    blurb: "Rescue the customers from pizza monsters."
   },
   {
     id: "pokemon-towering-legends",

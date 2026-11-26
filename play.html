@@ -32,6 +32,7 @@
 <script src="games.js"></script>
 <script>
   var stage = document.getElementById("stage");
+  var bezel = document.querySelector(".bezel");
   var message = document.getElementById("message");
   var titleEl = document.getElementById("title");
   var player = null;
@@ -45,9 +46,21 @@
     document.title = text + " · John P. Stinky HQ";
   }
 
+  // Shape the frame to the game: width / height, e.g. 550 / 400.
+  function setRatio(w, h) {
+    if (!(w > 0 && h > 0)) return;
+    bezel.style.setProperty("--ar", w + " / " + h);
+    bezel.style.setProperty("--ar-num", String(w / h));
+  }
+
   function ensurePlayer() {
     if (player) return player;
     player = window.RufflePlayer.newest().createPlayer();
+    // Ruffle reads the stage size from the .swf and fires this once it knows it.
+    player.addEventListener("loadedmetadata", function () {
+      var m = player.metadata;
+      if (m) setRatio(m.width, m.height);
+    });
     stage.appendChild(player);
     return player;
   }
@@ -86,7 +99,11 @@
   window.addEventListener("load", function () {
     if (game) {
       setTitle(game.title);
-      if (game.ratio) stage.style.aspectRatio = game.ratio;
+      // Optional override from games.js, used until the game reports its own size.
+      if (game.ratio) {
+        var parts = String(game.ratio).split("/");
+        setRatio(parseFloat(parts[0]), parseFloat(parts[1] || 1));
+      }
       // encodeURI handles file names with spaces
       play({ url: encodeURI(game.file) }, game.title);
     } else if (id) {

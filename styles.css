@@ -97,14 +97,23 @@ a:focus-visible, button:focus-visible {
 .back { font-weight: 600; text-decoration: none; }
 .back:hover { text-decoration: underline; }
 
+/* --ar is the game's width / height. play.html sets it from the game file
+   once it loads. The frame is as wide as the page allows, but never so tall
+   that it runs off the bottom of the screen (13rem leaves room for the title
+   and buttons). */
 .bezel {
+  --ar: 4 / 3;
+  --ar-num: 1.3333;
   background: var(--bezel);
   padding: 10px;
   border-radius: 14px;
+  margin-inline: auto;
+  width: min(100%, max(320px, (100vh - 13rem) * var(--ar-num) + 20px));
+  transition: width .2s ease;
 }
 #stage {
   width: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: var(--ar);
   background: var(--screen);
   border-radius: 6px;
   overflow: hidden;
