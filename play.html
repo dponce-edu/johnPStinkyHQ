@@ -23,11 +23,6 @@
   <div class="controls">
     <button id="reload" type="button">Restart</button>
     <button id="full" class="quiet" type="button">Full screen</button>
-    <label class="file quiet">
-      Open your own .swf
-      <input id="picker" type="file" accept=".swf,application/x-shockwave-flash">
-    </label>
-    <span id="name"></span>
   </div>
 </div>
 
@@ -38,7 +33,6 @@
 <script>
   var stage = document.getElementById("stage");
   var message = document.getElementById("message");
-  var nameEl = document.getElementById("name");
   var titleEl = document.getElementById("title");
   var player = null;
   var last = null;
@@ -65,7 +59,10 @@
     }
     last = { source: source, label: label };
     hideMessage();
-    var result = ensurePlayer().load(source);
+    // openUrlMode "deny": stop games from opening links or redirecting the page
+    // (Flash getURL / navigateToURL). Use "confirm" to ask the player instead.
+    var options = Object.assign({ openUrlMode: "deny" }, source);
+    var result = ensurePlayer().load(options);
     if (result && result.catch) {
       result.catch(function (err) {
         console.error(err);
@@ -76,19 +73,6 @@
 
   var id = new URLSearchParams(location.search).get("game");
   var game = (window.GAMES || []).filter(function (g) { return g.id === id; })[0];
-
-  document.getElementById("picker").addEventListener("change", function (e) {
-    var file = e.target.files[0];
-    if (!file) return;
-    var reader = new FileReader();
-    reader.onload = function () {
-      setTitle(file.name.replace(/\.swf$/i, ""));
-      nameEl.textContent = "Playing a file from your computer";
-      stage.style.aspectRatio = "4 / 3";
-      play({ data: new Uint8Array(reader.result) }, file.name);
-    };
-    reader.readAsArrayBuffer(file);
-  });
 
   document.getElementById("reload").addEventListener("click", function () {
     if (last) play(last.source, last.label);
@@ -107,7 +91,7 @@
     } else if (id) {
       show('No game called "' + id.replace(/[<>&"]/g, "") + '". <a href="index.html">See all games</a>');
     } else {
-      show('Choose a game from the <a href="index.html">homepage</a>, or open your own .swf below.');
+      show('Choose a game from the <a href="index.html">homepage</a>.');
     }
   });
 </script>
