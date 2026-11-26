@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Play · John P. Stinky HQ</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="wrap">
+  <div class="topbar">
+    <a class="back" href="index.html">&larr; All games</a>
+    <h1 id="title">Flash Player</h1>
+  </div>
+
+  <main class="bezel">
+    <div id="stage">
+      <div id="message">Loading player…</div>
+    </div>
+  </main>
+
+  <div class="controls">
+    <button id="reload" type="button">Restart</button>
+    <button id="full" class="quiet" type="button">Full screen</button>
+    <label class="file quiet">
+      Open your own .swf
+      <input id="picker" type="file" accept=".swf,application/x-shockwave-flash">
+    </label>
+    <span id="name"></span>
+  </div>
+</div>
+
+<!-- Ruffle: loads from a CDN. To host it yourself, download a release from
+     https://ruffle.rs/downloads and point this src at the local ruffle.js -->
+<script src="https://unpkg.com/@ruffle-rs/ruffle"></script>
+<script src="games.js"></script>
+<script>
+  var stage = document.getElementById("stage");
+  var message = document.getElementById("message");
+  var nameEl = document.getElementById("name");
+  var titleEl = document.getElementById("title");
+  var player = null;
+  var last = null;
+
+  function show(html) { message.innerHTML = html; message.hidden = false; }
+  function hideMessage() { message.hidden = true; }
+
+  function setTitle(text) {
+    titleEl.textContent = text;
+    document.title = text + " · John P. Stinky HQ";
+  }
+
+  function ensurePlayer() {
+    if (player) return player;
+    player = window.RufflePlayer.newest().createPlayer();
+    stage.appendChild(player);
+    return player;
+  }
+
+  function play(source, label) {
+    if (!window.RufflePlayer) {
+      show("Ruffle could not be loaded. Check your internet connection and reload the page.");
+      return;
+    }
+    last = { source: source, label: label };
+    hideMessage();
+    var result = ensurePlayer().load(source);
+    if (result && result.catch) {
+      result.catch(function (err) {
+        console.error(err);
+        show("Couldn't load " + label + '. <a href="index.html">Pick another game</a>');
+      });
+    }
+  }
+
+  var id = new URLSearchParams(location.search).get("game");
+  var game = (window.GAMES || []).filter(function (g) { return g.id === id; })[0];
+
+  document.getElementById("picker").addEventListener("change", function (e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      setTitle(file.name.replace(/\.swf$/i, ""));
+      nameEl.textContent = "Playing a file from your computer";
+      stage.style.aspectRatio = "4 / 3";
+      play({ data: new Uint8Array(reader.result) }, file.name);
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  document.getElementById("reload").addEventListener("click", function () {
+    if (last) play(last.source, last.label);
+  });
+
+  document.getElementById("full").addEventListener("click", function () {
+    if (player && player.enterFullscreen) player.enterFullscreen();
+    else if (stage.requestFullscreen) stage.requestFullscreen();
+  });
+
+  window.addEventListener("load", function () {
+    if (game) {
+      setTitle(game.title);
+      if (game.ratio) stage.style.aspectRatio = game.ratio;
+      play({ url: game.file }, game.title);
+    } else if (id) {
+      show('No game called "' + id.replace(/[<>&"]/g, "") + '". <a href="index.html">See all games</a>');
+    } else {
+      show('Choose a game from the <a href="index.html">homepage</a>, or open your own .swf below.');
+    }
+  });
+</script>
+</body>
+</html>
