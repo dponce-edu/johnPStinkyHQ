@@ -133,19 +133,19 @@ window.GAMES = [
     id: "rubble-trouble-moscow",
     title: "Rubble Trouble: Moscow",
     file: "games/Rubble_Trouble_Moscow.swf",
-    blurb: "гул!!! гул!!! гул!!!."
+    blurb: "гул!!! гул!!! гул!!!"
   },
   {
     id: "rubble-trouble-new-york",
     title: "Rubble Trouble: New York",
     file: "games/Rubble_Trouble_New_York.swf",
-    blurb: "BOOM!!! BOOSH!!! BADOOOOOOOM!!!."
+    blurb: "BOOM!!! BOOSH!!! BADOOOOOOOM!!!"
   },
   {
     id: "rubble-trouble-tokyo",
     title: "Rubble Trouble: Tokyo",
     file: "games/Rubble_Trouble_Tokyo.swf",
-    blurb: "EXPLOSIONS!!! BUILDINGS!!! MASS DESTRUCTION!!!."
+    blurb: "EXPLOSIONS!!! BUILDINGS!!! MASS DESTRUCTION!!!"
   },
   {
     id: "skywire",
