@@ -87,7 +87,8 @@
     if (game) {
       setTitle(game.title);
       if (game.ratio) stage.style.aspectRatio = game.ratio;
-      play({ url: game.file }, game.title);
+      // encodeURI handles file names with spaces
+      play({ url: encodeURI(game.file) }, game.title);
     } else if (id) {
       show('No game called "' + id.replace(/[<>&"]/g, "") + '". <a href="index.html">See all games</a>');
     } else {
