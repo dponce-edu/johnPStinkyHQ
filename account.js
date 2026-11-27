@@ -51,7 +51,7 @@
     });
     box.append(" · ", out);
 
-    document.body.append(box);
+    (document.querySelector(".site-bar") || document.body).append(box);
     document.body.classList.add("has-corner-account");
   }
 

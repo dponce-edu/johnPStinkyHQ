@@ -9,9 +9,11 @@
   --screen: #000000;
   --accent: #00ff00;
   --accent-ink: #000000;
+  --bar-h: 5.5rem; /* height of the title bar at the top of every page */
 }
 
-* { box-sizing: border-box; }
+/* Square corners everywhere, including browser-default buttons and inputs. */
+* { box-sizing: border-box; border-radius: 0; }
 /* "hidden" always hides, even on things a rule below gives display: grid/flex. */
 [hidden] { display: none !important; }
 html, body { margin: 0; }
@@ -31,6 +33,17 @@ body::before {
   background: url("background.jpg") repeat;
   animation: star-drift 90s linear infinite;
   will-change: transform;
+  pointer-events: none;
+}
+/* Black layer over the moving stars, under everything else, to tone them
+   down. Raise --dim toward 1 for darker (1 hides the stars completely). */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: #000;
+  opacity: var(--dim, .5);
   pointer-events: none;
 }
 @keyframes star-drift {
@@ -56,7 +69,8 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 2rem 1rem 3rem;
+  /* Room on top for the fixed title bar. */
+  padding: calc(var(--bar-h) + 1.25rem) 1rem 3rem;
 }
 
 .wrap { width: 100%; max-width: 980px; }
@@ -77,13 +91,13 @@ a:focus-visible, button:focus-visible {
   margin: 0;
   padding: 0;
   display: grid;
-  /* 5 games per row, fewer on smaller screens. */
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 1rem;
+  /* 10 games per row, fewer on smaller screens. */
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: .5rem;
 }
-@media (max-width: 900px) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-@media (max-width: 720px) { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 520px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .grid { grid-template-columns: repeat(8, minmax(0, 1fr)); } }
+@media (max-width: 720px) { .grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 /* Square cards: the name area fills whatever the rating line leaves. */
 .card {
   display: flex;
@@ -92,7 +106,6 @@ a:focus-visible, button:focus-visible {
   background: var(--card);
   color: inherit;
   text-decoration: none;
-  border-radius: 12px;
   box-shadow: inset 0 0 0 2px var(--bezel);
   overflow: hidden;
   transition: transform .12s ease, box-shadow .12s ease;
@@ -107,21 +120,21 @@ a:focus-visible, button:focus-visible {
   justify-content: center;
 }
 .thumb .ph {
-  font-size: 1.35rem;
+  font-size: .65rem;
   font-weight: 700;
   line-height: 1.25;
   color: var(--ink);
   letter-spacing: .02em;
   text-align: center;
   overflow-wrap: anywhere;
-  padding: 1rem;
+  padding: .25rem;
   width: 100%;
   height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.card .info { padding: .7rem .9rem .9rem; }
+.card .info { padding: .2rem .35rem .35rem; }
 .card .info:empty { display: none; } /* no title, blurb or rating to show */
 .card h2 { font-size: 1.05rem; margin: 0; }
 .card p { margin: .15rem 0 0; font-size: .9rem; color: var(--muted); }
@@ -146,8 +159,9 @@ a:focus-visible, button:focus-visible {
    screen) where Windows had minimize, maximize and close.
    --ar is the game's width / height. play.html sets it from the game file
    once it loads. The window is as wide as the page allows, but never so tall
-   that it runs off the bottom of the screen (13rem leaves room for the link
-   and title bar; 12px is the frame's left and right edges). */
+   that it runs off the bottom of the screen (--bar-h + 9.25rem leaves room for the page's
+   top and bottom padding and the title bar; 12px is the frame's left and
+   right edges). */
 .bezel {
   --ar: 4 / 3;
   --ar-num: 1.3333;
@@ -156,7 +170,7 @@ a:focus-visible, button:focus-visible {
   --w95-shadow: #808080;
   --w95-dark: #000000;
   margin-inline: auto;
-  width: max(320px, (100vh - 13rem) * var(--ar-num) + 12px);
+  width: max(320px, (100vh - var(--bar-h) - 9.25rem) * var(--ar-num) + 12px);
   max-width: 100%;
   transition: width .2s ease;
 }
@@ -204,7 +218,6 @@ a:focus-visible, button:focus-visible {
   height: 22px;
   padding: 0;
   border: 0;
-  border-radius: 0;
   background: var(--w95-face);
   color: var(--w95-dark);
   text-shadow: none;
@@ -274,7 +287,6 @@ button {
   background: var(--accent);
   color: var(--accent-ink);
   border: 0;
-  border-radius: 8px;
   padding: .6rem 1rem;
   cursor: pointer;
 }
@@ -290,7 +302,6 @@ dialog {
   background: var(--page);
   color: var(--ink);
   border: 2px solid var(--ink);
-  border-radius: 12px;
   padding: 1.25rem 1.5rem;
   max-width: min(90vw, 26rem);
   font: inherit;
@@ -313,17 +324,34 @@ dialog::backdrop { background: rgba(0, 0, 0, .7); }
   justify-content: center;
 }
 .play-layout .bezel { flex: 0 1 auto; min-width: 280px; margin-inline: 0; }
-.play-layout .community {
+.play-side {
   flex: 1 1 15rem;
   min-width: 15rem;
   max-width: 640px;
-  margin: 0;
 }
-.play-layout .community h2:first-child { margin-top: 0; }
+.play-side .community { margin: 0; }
+/* Big green "Another Game?" button above the rating: back to the homepage. */
+.another-game {
+  display: block;
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-decoration: none;
+  text-shadow: none;
+  text-align: center;
+  transition: transform .12s ease, filter .12s ease;
+}
+.another-game:hover { filter: brightness(.85); }
+.another-game:active { transform: translateY(2px); }
+.play-side .community h2:first-child { margin-top: 0; }
+
 @media (max-width: 800px) {
   .play-layout { flex-direction: column; align-items: center; }
   .play-layout .bezel { min-width: 0; }
-  .play-layout .community { width: 100%; min-width: 0; margin-top: 1rem; }
+  .play-side { width: 100%; min-width: 0; margin-top: 1rem; }
 }
 
 /* ---------- Ratings, comments and log-in (comments.js) ---------- */
@@ -351,7 +379,6 @@ input[type="text"], input[type="password"], textarea, select {
   color: var(--ink);
   background: #000;
   border: 2px solid var(--bezel);
-  border-radius: 8px;
   padding: .55rem .75rem;
 }
 input:focus-visible, textarea:focus-visible {
@@ -404,26 +431,50 @@ input:focus-visible, textarea:focus-visible {
   .pin-login.shake { animation: none; }
 }
 /* ---------- Account box, top-right of every logged-in page (account.js) ---------- */
-.corner-account {
+/* Title bar fixed across the top of every page, with a line under it:
+   site name on the left, account box (name · Log out) on the right. */
+.site-bar {
   position: fixed;
-  top: .75rem;
-  right: .75rem;
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 100;
-  max-width: calc(100vw - 1.5rem);
-  padding: .4rem .8rem;
+  height: var(--bar-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 .75rem;
   background: rgba(0, 0, 0, .85);
-  border: 2px solid var(--bezel);
-  border-radius: 10px;
-  font-size: .9rem;
-  white-space: nowrap;
+  border-bottom: 3px solid var(--ink);
+}
+.site-name,
+.corner-account { white-space: nowrap; }
+.site-name {
+  flex-shrink: 0;
+  padding: .6rem 1.6rem;
+  color: var(--ink);
+  font-size: 2.2rem;
+  line-height: 1.2;
+  font-weight: 700;
+  text-decoration: none;
+}
+.site-name:hover { text-decoration: underline; }
+.corner-account {
+  min-width: 0;
+  padding: .8rem 1.6rem;
+  font-size: 1.8rem;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .corner-account strong { color: var(--ink); }
 .corner-account a { color: var(--ink); }
-/* On narrow screens, leave room above the page title for the box. */
+/* Narrow screens: both boxes at their old size so they fit side by side. */
 @media (max-width: 760px) {
-  body.has-corner-account { padding-top: 3.5rem; }
+  :root { --bar-h: 3.5rem; }
+  .site-name { font-size: 1.1rem; padding: .3rem .8rem; }
+  .corner-account { font-size: .9rem; padding: .4rem .8rem; }
 }
 
 .comment-form textarea { width: 100%; resize: vertical; display: block; }
@@ -449,7 +500,6 @@ button:disabled { opacity: .5; cursor: progress; }
 .comments li {
   background: rgba(0, 0, 0, .85);
   border: 2px solid var(--bezel);
-  border-radius: 10px;
   padding: .6rem .9rem;
 }
 .comments li.empty { color: var(--muted); }
@@ -491,7 +541,7 @@ button:disabled { opacity: .5; cursor: progress; }
 .pin-login > button { margin-top: .25rem; }
 .comments .body { margin-top: .3rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-.card .rating { color: var(--ink); font-size: .9rem; margin-top: .3rem; }
+.card .rating { color: var(--ink); font-size: .65rem; margin-top: 0; }
 
 /* ---------- Locked games (index.html, play.html) ---------- */
 /* A game this person hasn't played yet: a "?" in place of its picture. */
@@ -499,7 +549,7 @@ button:disabled { opacity: .5; cursor: progress; }
 .card.locked:hover { border-color: var(--accent); }
 .card.locked h2 { letter-spacing: .2em; }
 .thumb .mystery {
-  font-size: 4.5rem;
+  font-size: 2.25rem;
   color: var(--ink);
   text-shadow: 0 0 12px var(--ink), -2px -2px 0 #000, 2px 2px 0 #000;
   animation: mystery-pulse 2.4s ease-in-out infinite;
