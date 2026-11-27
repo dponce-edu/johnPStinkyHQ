@@ -107,6 +107,12 @@ window.GAMES = [
     blurb: "Flip that man!"
   },
   {
+    id: "home-run-derby",
+    title: "Home Run Derby",
+    file: "games/home-run-derby.swf",
+    blurb: "Swing for the fences."
+  },
+  {
     id: "learn-to-fly",
     title: "Learn to Fly",
     file: "games/learn-to-fly.swf",
@@ -125,10 +131,28 @@ window.GAMES = [
     blurb: "Decorate a room your way."
   },
   {
+    id: "pac-man",
+    title: "Pac-Man",
+    file: "games/pac-man.swf",
+    blurb: "Eat the dots, dodge the ghosts."
+  },
+  {
+    id: "papas-pizzeria",
+    title: "Papa's Pizzeria",
+    file: "games/papas-pizzeria.swf",
+    blurb: "Take orders, top pizzas, keep customers happy."
+  },
+  {
     id: "pokemon-towering-legends",
     title: "Pokémon Towering Legends",
     file: "games/pokemon-towering-legends.swf",
     blurb: "Pokémon fan tower-building-time-tester!"
+  },
+  {
+    id: "portal",
+    title: "Portal: The Flash Version",
+    file: "games/portal.swf",
+    blurb: "Think with portals, in 2D."
   },
   {
     id: "powerpuff-girls-puppybots",
@@ -155,6 +179,36 @@ window.GAMES = [
     blurb: "Roll, bounce and push your way through each level."
   },
   {
+    id: "red-ball-2",
+    title: "Red Ball 2",
+    file: "games/red-ball-2.swf",
+    blurb: "More rolling, more bouncing."
+  },
+  {
+    id: "red-ball-3",
+    title: "Red Ball 3",
+    file: "games/red-ball-3.swf",
+    blurb: "Roll on through a brand new set of levels."
+  },
+  {
+    id: "red-ball-4-vol-1",
+    title: "Red Ball 4: Volume 1",
+    file: "games/red-ball-4-vol-1.swf",
+    blurb: "Stop the evil black squares from squaring the world."
+  },
+  {
+    id: "red-ball-4-vol-2",
+    title: "Red Ball 4: Volume 2",
+    file: "games/red-ball-4-vol-2.swf",
+    blurb: "The squares are back. Roll them out."
+  },
+  {
+    id: "red-ball-4-vol-3",
+    title: "Red Ball 4: Volume 3",
+    file: "games/red-ball-4-vol-3.swf",
+    blurb: "Into the factory for the final fight."
+  },
+  {
     id: "riddle-school",
     title: "Riddle School",
     file: "games/riddle-school.swf",
@@ -177,6 +231,12 @@ window.GAMES = [
     title: "Rubble Trouble: Tokyo",
     file: "games/rubble-trouble-tokyo.swf",
     blurb: "EXPLOSIONS!!! BUILDINGS!!! MASS DESTRUCTION!!!"
+  },
+  {
+    id: "run",
+    title: "Run",
+    file: "games/run.swf",
+    blurb: "Run and jump through a tunnel in space."
   },
   {
     id: "skywire",
