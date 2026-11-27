@@ -42,6 +42,12 @@
 
 <script src="pinpad.js"></script>
 <script>
+  // A new log-in gets a new random game order on the homepage (index.html).
+  try {
+    Object.keys(localStorage).forEach(function (k) {
+      if (k.indexOf("ce-game-order:") === 0) localStorage.removeItem(k);
+    });
+  } catch (e) {}
   // Type the username (from the teacher), then the PIN with the number pad or the keyboard.
   // The last digit logs in.
   var form = document.getElementById("login");

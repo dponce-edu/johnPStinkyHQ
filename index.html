@@ -98,14 +98,47 @@
     return a;
   }
 
+  // A copy of the list in random order (Fisher-Yates shuffle).
+  function shuffled(list) {
+    var out = list.slice();
+    for (var i = out.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = out[i]; out[i] = out[j]; out[j] = t;
+    }
+    return out;
+  }
+
+  // This person's random game order: shuffled once per log-in, then kept
+  // until they next log in (login.html and join.html clear it). Games added
+  // to games.js since then go in at random spots; removed ones drop out.
+  function loginOrder(orderKey) {
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(orderKey)); } catch (e) {}
+    var byId = {};
+    games.forEach(function (g) { byId[g.id] = g; });
+    var out = [];
+    if (Array.isArray(saved)) {
+      saved.forEach(function (id) {
+        if (byId[id]) { out.push(byId[id]); delete byId[id]; }
+      });
+    }
+    shuffled(Object.keys(byId)).forEach(function (id) {
+      out.splice(Math.floor(Math.random() * (out.length + 1)), 0, byId[id]);
+    });
+    try { localStorage.setItem(orderKey, JSON.stringify(out.map(function (g) { return g.id; }))); } catch (e) {}
+    return out;
+  }
+
   // unlocked: the set of game ids this person has unlocked, or null for all
-  // (admins, or no server, e.g. GitHub Pages). Games unlocked since the last
+  // (admins, or no server, e.g. GitHub Pages). Standard (non-admin) accounts
+  // get their per-log-in random order (orderKey); admins and the no-server
+  // copy keep the games.js order. Games unlocked since the last
   // visit get a reveal animation; "seen" remembers which were already shown.
-  function render(unlocked, seenKey) {
+  function render(unlocked, seenKey, orderKey) {
     var seen = {};
     try { seen = JSON.parse(localStorage.getItem(seenKey) || "{}"); } catch (e) {}
     var count = 0;
-    games.forEach(function (game) {
+    (unlocked && orderKey ? loginOrder(orderKey) : games).forEach(function (game) {
       var open = !unlocked || unlocked[game.id];
       var li = document.createElement("li");
       var a = open ? card(game) : lockedCard(game);
@@ -130,10 +163,10 @@
   // Ask the server what's unlocked before drawing anything, so locked games'
   // pictures never flash up. No answer in 4 s, or no server: show everything.
   var drawn = false;
-  function draw(unlocked, seenKey) {
+  function draw(unlocked, seenKey, orderKey) {
     if (drawn) return;
     drawn = true;
-    render(unlocked, seenKey);
+    render(unlocked, seenKey, orderKey);
   }
   setTimeout(function () { draw(null); }, 4000);
   fetch("/api/unlocks", { credentials: "same-origin" })
@@ -145,7 +178,7 @@
       if (!data || data.all) return draw(null);
       var set = {};
       data.unlocked.forEach(function (id) { set[id] = true; });
-      draw(set, "ce-unlocks-seen:" + data.user);
+      draw(set, "ce-unlocks-seen:" + data.user, "ce-game-order:" + data.user);
     })
     .catch(function () { draw(null); });
 
