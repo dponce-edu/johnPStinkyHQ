@@ -13,9 +13,34 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
+
+/* Tiled star image drifting diagonally (down and to the right) behind the page.
+   The layer is one tile bigger than the screen and moves exactly one tile
+   (2000 x 1402, the size of background.jpg) per loop, so the loop is seamless.
+   Change 90s to make it faster or slower. */
+body::before {
+  content: "";
+  position: fixed;
+  top: -1402px;
+  left: -2000px;
+  right: 0;
+  bottom: 0;
+  z-index: -1;
+  background: url("background.jpg") repeat;
+  animation: star-drift 90s linear infinite;
+  will-change: transform;
+  pointer-events: none;
+}
+@keyframes star-drift {
+  to { transform: translate(2000px, 1402px); }
+}
+/* Hold still for people who've asked their computer for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+}
 body {
-  /* Tiled star image; black shows while it loads or if it's missing. */
-  background: var(--page) url("background.jpg") repeat;
+  /* Black shows while the star image loads or if it's missing. */
+  background: var(--page);
   color: var(--ink);
   font: 16px/1.5 "Courier New", Courier, monospace;
   text-align: center;
