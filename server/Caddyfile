@@ -31,6 +31,10 @@ clubescapade.example.com {
 	}
 
 	header {
+		# Pages, and the Flash games in them, may only load from this site and
+		# the Ruffle CDN. This blocks the old ad networks and trackers built
+		# into many .swf files. Keep in step with CSP in server/app.py.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://unpkg.com; connect-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 		X-Content-Type-Options nosniff
 		Referrer-Policy strict-origin-when-cross-origin
 		-Server

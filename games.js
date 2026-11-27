@@ -22,6 +22,18 @@ window.GAMES = [
     blurb: "Momentum-based platformer."
   },
   {
+    id: "amberial-nebulosa",
+    title: "Amberial: Nebulosa Realms",
+    file: "games/amberial-nebulosa.swf",
+    blurb: "The AmberBall is back: 22 new levels and a tower of glory."
+  },
+  {
+    id: "angry-birds",
+    title: "Angry Birds",
+    file: "games/angry-birds.swf",
+    blurb: "Fling birds, topple pigs."
+  },
+  {
     id: "anime-face-maker",
     title: "Anime Face Maker",
     file: "games/anime-face-maker.swf",
@@ -94,6 +106,24 @@ window.GAMES = [
     blurb: "Shield the oranges from the toxic cloud, again!"
   },
   {
+    id: "devilish-candy-house",
+    title: "Devilish Candy House",
+    file: "games/devilish-candy-house.swf",
+    blurb: "Build a candy house, or sneakily wreck one."
+  },
+  {
+    id: "devilish-cat",
+    title: "Devilish Cat",
+    file: "games/devilish-cat.swf",
+    blurb: "Look after a cat, or play pranks on it."
+  },
+  {
+    id: "devilish-christmas",
+    title: "Devilish Christmas",
+    file: "games/devilish-christmas.swf",
+    blurb: "Holiday mischief."
+  },
+  {
     id: "devilish-cooking",
     title: "Devilish Cooking",
     file: "games/devilish-cooking.swf",
@@ -122,6 +152,12 @@ window.GAMES = [
     title: "Fancy Pants Adventures: World 2",
     file: "games/fancy-pants-2.swf",
     blurb: "The Adventures of Fancy Pants Man 2: Electric Boogaloo!"
+  },
+  {
+    id: "fancy-pants-3",
+    title: "Fancy Pants Adventures: World 3",
+    file: "games/fancy-pants-3.swf",
+    blurb: "Fancy Pants Man is back for more."
   },
   {
     id: "fireboy-watergirl-forest-temple",
@@ -170,6 +206,12 @@ window.GAMES = [
     title: "Learn to Fly 2",
     file: "games/learn-to-fly-2.swf",
     blurb: "The penguin is back, and still determined to fly."
+  },
+  {
+    id: "line-rider-2",
+    title: "Line Rider 2",
+    file: "games/line-rider-2.swf",
+    blurb: "Draw a track and watch the rider go."
   },
   {
     id: "my-new-room",
@@ -296,6 +338,12 @@ window.GAMES = [
     title: "Raft Wars",
     file: "games/raft-wars.swf",
     blurb: "Defend your treasure from raft-riding raiders."
+  },
+  {
+    id: "raft-wars-2",
+    title: "Raft Wars 2",
+    file: "games/raft-wars-2.swf",
+    blurb: "More rafts, more water balloons, more war."
   },
   {
     id: "red-ball",

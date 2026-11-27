@@ -460,6 +460,25 @@ ROUTES = [
 # Never served by --dev, even though they sit in the site folder.
 PRIVATE_PREFIXES = ("/server", "/data", "/.git", "/.gitignore")
 
+# What pages (and the Flash games inside them) may load. Games can only fetch
+# from this site and the Ruffle CDN, which stops the old ad networks and
+# trackers built into many .swf files. Keep in step with server/Caddyfile.
+CSP = "; ".join([
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://unpkg.com",
+    "connect-src 'self' https://unpkg.com",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "media-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "worker-src 'self' blob:",
+    "frame-src 'none'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+])
+
 # The only files anyone can load without logging in: the log-in page and what
 # it needs. In production Caddy asks /api/auth-check about every request.
 PUBLIC_PATHS = ("/login.html", "/join.html", "/pinpad.js", "/styles.css", "/background.jpg")
@@ -553,6 +572,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         # (Caddy does the same in production; see server/Caddyfile.)
         if getattr(self, "revalidate", False):
             self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Security-Policy", CSP)
         super().end_headers()
 
     def route(self, method, path):

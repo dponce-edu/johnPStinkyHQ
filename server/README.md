@@ -175,6 +175,14 @@ progress. Saves made in a browser before this existed are adopted by the first
 student to log in there. If two computers play the same game at once, the last
 upload wins.
 
+**Ads and trackers in games:** many old .swf files contain code that calls ad
+networks (MochiAds, CPMStar, Flipline ads, Spil Games) and trackers
+(Playtomic, MochiBot, Google Analytics). The site's Content-Security-Policy
+(in the Caddyfile, and in `app.py` for `--dev`) only lets pages and games load
+from this site and the Ruffle CDN, so those requests are blocked and nothing
+leaves the network. If you ever host Ruffle yourself, remove
+`https://unpkg.com` from both copies.
+
 **Blocked words:** comments containing a word from
 `server/blocked-words.txt` are turned away with a "please keep it clean"
 message. Edit the list in the repo, push, and `git pull` on the Pi. The
