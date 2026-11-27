@@ -15,44 +15,41 @@
 </header>
 
 <!-- Admin tools. Anyone logged in can load this page, but every request it
-     makes is refused by the server unless the account is an admin. -->
-<div class="wrap">
-  <div class="topbar">
-    <h1>Admin tools</h1>
-  </div>
+     makes is refused by the server unless the account is an admin.
+     Sidebar on the left picks which tool shows on the right (#reports,
+     #timeouts, #unlocks, #games in the address, so a refresh stays put).
+     Invites and hidden-games access aren't on this page for now; the server
+     still has both (see `python3 server/app.py --help`). -->
+<div class="wrap wide">
+  <h1 class="sr-only">Admin tools</h1>
+  <div id="tools" class="admin-layout" hidden>
+    <nav class="admin-sidebar" aria-labelledby="sidebar-title">
+      <h2 id="sidebar-title">Student Actions</h2>
+      <a class="side-item" href="#reports" data-panel="reports">Reported comments
+        <span id="report-count" class="side-count" hidden></span></a>
+      <a class="side-item" href="#timeouts" data-panel="timeouts">Timeout a student</a>
+      <a class="side-item" href="#unlocks" data-panel="unlocks">Locked/unlocked games</a>
+      <h2 class="side-group">Games</h2>
+      <a class="side-item" href="#games" data-panel="games">Game settings</a>
+    </nav>
 
-  <main class="admin">
-    <p id="status" class="muted" role="status" aria-live="polite">Loading…</p>
+    <main class="admin">
+      <p id="status" class="muted" role="status" aria-live="polite"></p>
 
-    <div id="tools" hidden>
-      <section>
+      <section id="panel-reports" class="admin-panel">
         <h2>Reported comments</h2>
         <ul id="reports" class="comments"></ul>
       </section>
 
-      <section>
-        <h2>Invite a student</h2>
-        <p class="muted">Enter their proper name (only admins see it) and the username
-          they'll log in with. They use the code on the Join page to choose their
-          screen name (what others see) and their PIN.</p>
-        <form id="invite-form" class="invite-form">
-          <label for="invite-proper">Proper name</label>
-          <input id="invite-proper" type="text" autocomplete="off" maxlength="100"
-                 placeholder="e.g. Jamie Rivera">
-          <label for="invite-name">Username</label>
-          <input id="invite-name" type="text" autocomplete="off" autocapitalize="off"
-                 spellcheck="false" maxlength="20" placeholder="e.g. jamie_r">
-          <button type="submit">Make invite</button>
-        </form>
-
-        <h3>Waiting to join</h3>
-        <ul id="invites" class="comments"></ul>
-      </section>
-
-      <section>
-        <h2>Time out a student</h2>
+      <section id="panel-timeouts" class="admin-panel" hidden>
+        <h2>Timeout a student</h2>
         <p class="muted">They're logged out right away and can't use the site until it ends.</p>
         <form id="timeout-form" class="timeout-form">
+          <label for="to-grade">Grade</label>
+          <select id="to-grade">
+            <option value="">All</option><option value="1">1</option><option value="2">2</option>
+            <option value="3">3</option><option value="4">4</option><option value="5">5</option>
+          </select>
           <label for="to-user">Student</label>
           <select id="to-user" required></select>
           <label for="to-length">For</label>
@@ -64,14 +61,51 @@
         <ul id="timeouts" class="comments"></ul>
       </section>
 
-      <section>
-        <h2>Hidden games</h2>
-        <p class="muted">Games in the games/hidden folder. Only admins and the
-          students ticked here can see or play them.</p>
-        <ul id="hidden-access" class="comments hidden-access"></ul>
+      <section id="panel-unlocks" class="admin-panel" hidden>
+        <h2>Locked/unlocked games</h2>
+        <p class="muted">Every game starts locked behind a "?" until the student
+          presses Play on it. Tick a game to unlock it for them, untick to lock it again.
+          Mature games don't unlock: they open by grade level.</p>
+        <form id="unlock-form" class="timeout-form" onsubmit="return false">
+          <label for="ul-user">Student</label>
+          <select id="ul-user"></select>
+        </form>
+        <div id="unlock-tools" hidden>
+          <form class="timeout-form" onsubmit="return false">
+            <label for="ul-grade">Grade level</label>
+            <select id="ul-grade">
+              <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+              <option value="4">4</option><option value="5">5</option>
+            </select>
+          </form>
+          <p class="unlock-summary"><span id="ul-count"></span> ·
+            <button type="button" class="link" id="ul-all">Unlock all</button> ·
+            <button type="button" class="link" id="ul-none">Lock all</button></p>
+          <ul id="ul-games" class="unlock-list"></ul>
+          <div id="ul-mature-box" hidden>
+            <h3>Mature games</h3>
+            <p class="muted">Open at the grade shown and above; hidden below it.</p>
+            <ul id="ul-mature" class="unlock-list mature-list"></ul>
+          </div>
+        </div>
       </section>
-    </div>
-  </main>
+
+      <section id="panel-games" class="admin-panel" hidden>
+        <h2>Game settings</h2>
+        <p class="muted">Maturity: below that grade, standard students can't see or
+          play the game (and it never needs unlocking). Disabled games are off for
+          every standard student, whatever their grade or hidden-games access.
+          Admins can always open everything.</p>
+        <form class="timeout-form" onsubmit="return false">
+          <label for="gs-search">Find</label>
+          <input id="gs-search" type="text" autocomplete="off" placeholder="Game name">
+          <span id="gs-count" class="muted"></span>
+        </form>
+        <ul id="gs-list" class="game-settings"></ul>
+      </section>
+    </main>
+  </div>
+  <p id="loading" class="muted" role="status">Loading…</p>
 </div>
 
 <script src="games.js"></script>
@@ -82,11 +116,14 @@
 <script>
 (function () {
   var statusEl = document.getElementById("status");
+  var loadingEl = document.getElementById("loading");
   var tools = document.getElementById("tools");
   var reportsEl = document.getElementById("reports");
   var timeoutsEl = document.getElementById("timeouts");
   var form = document.getElementById("timeout-form");
   var userSel = document.getElementById("to-user");
+  var gradeSel = document.getElementById("to-grade");
+  var students = []; // from the last loadUsers(), for the grade filter
   var lengthSel = document.getElementById("to-length");
 
   var titles = {};
@@ -158,11 +195,35 @@
     }, 4000);
   }
 
+  // ---- sidebar: one panel at a time, chosen by the address's #name
+
+  var PANELS = ["reports", "timeouts", "unlocks", "games"];
+  function showPanel() {
+    var name = location.hash.slice(1);
+    if (PANELS.indexOf(name) === -1) name = "reports";
+    PANELS.forEach(function (p) {
+      document.getElementById("panel-" + p).hidden = p !== name;
+    });
+    document.querySelectorAll(".side-item").forEach(function (a) {
+      if (a.dataset.panel === name) a.setAttribute("aria-current", "page");
+      else a.removeAttribute("aria-current");
+    });
+    say("");
+  }
+  window.addEventListener("hashchange", showPanel);
+  function goTo(name) {
+    if (location.hash === "#" + name) showPanel();
+    else location.hash = name;
+  }
+
   // ---- reported comments
 
   function loadReports() {
     return api("GET", "/api/admin/reports").then(function (data) {
       reportsEl.replaceChildren();
+      var count = document.getElementById("report-count");
+      count.textContent = data.comments.length;
+      count.hidden = !data.comments.length;
       if (!data.comments.length) {
         var none = document.createElement("li");
         none.className = "empty";
@@ -212,8 +273,10 @@
             });
           }), " · ",
           linkButton("Time out " + c.adminName, function () {
+            goTo("timeouts");
+            gradeSel.value = ""; // show everyone so this student is in the list
+            fillTimeoutStudents();
             userSel.value = c.username;
-            form.scrollIntoView({ behavior: "smooth", block: "center" });
             lengthSel.focus();
           })
         );
@@ -226,20 +289,29 @@
 
   // ---- timeouts
 
+  // The Student list, narrowed to the chosen grade ("All": everyone).
+  function fillTimeoutStudents() {
+    var keep = userSel.value;
+    var grade = gradeSel.value;
+    userSel.replaceChildren(new Option("Pick a student", ""));
+    students.forEach(function (u) {
+      if (!grade || String(u.grade) === grade) userSel.append(new Option(shown(u), u.name));
+    });
+    userSel.value = keep; // falls back to "Pick a student" if they're filtered out
+    if (userSel.selectedIndex === -1) userSel.value = "";
+  }
+  gradeSel.addEventListener("change", fillTimeoutStudents);
+
   function loadUsers() {
     return api("GET", "/api/admin/users").then(function (data) {
-      var keep = userSel.value;
-      userSel.replaceChildren(new Option("Pick a student", ""));
-      data.users.forEach(function (u) {
-        if (!u.admin) userSel.append(new Option(shown(u), u.name));
-      });
-      userSel.value = keep;
+      students = data.users.filter(function (u) { return !u.admin; });
+      fillTimeoutStudents();
 
       if (!lengthSel.options.length) {
         data.choices.forEach(function (m) { lengthSel.append(new Option(lengthLabel(m), m)); });
       }
 
-      renderHiddenAccess(data.users);
+      fillStudents(ulUser, data.users);
 
       timeoutsEl.replaceChildren();
       var out = data.users.filter(function (u) { return u.timeoutUntil; });
@@ -266,41 +338,6 @@
     });
   }
 
-  // ---- hidden games: one checkbox per student
-
-  var hiddenEl = document.getElementById("hidden-access");
-
-  function renderHiddenAccess(users) {
-    hiddenEl.replaceChildren();
-    var students = users.filter(function (u) { return !u.admin; });
-    if (!students.length) {
-      var none = document.createElement("li");
-      none.className = "empty";
-      none.textContent = "No students yet.";
-      hiddenEl.append(none);
-    }
-    students.forEach(function (u) {
-      var li = document.createElement("li");
-      var label = document.createElement("label");
-      var box = document.createElement("input");
-      box.type = "checkbox";
-      box.checked = u.hiddenGames;
-      box.addEventListener("change", function () {
-        box.disabled = true;
-        api("POST", "/api/admin/hidden-games", { username: u.name, allowed: box.checked })
-          .then(function (r) {
-            say(r.adminName + (r.hiddenGames ? " can now see the hidden games."
-                                             : " can no longer see the hidden games."));
-          })
-          .catch(function (err) { box.checked = !box.checked; fail(err); })
-          .then(function () { box.disabled = false; });
-      });
-      label.append(box, " " + shown(u));
-      li.append(label);
-      hiddenEl.append(li);
-    });
-  }
-
   function setTimeoutFor(name, minutes) {
     return api("POST", "/api/admin/timeout", { username: name, minutes: minutes }).then(function (r) {
       say(r.until ? r.adminName + " is timed out until " + r.until + "."
@@ -320,84 +357,215 @@
     });
   });
 
-  // ---- invites
+  // ---- locked/unlocked games for one student
 
-  var inviteForm = document.getElementById("invite-form");
-  var inviteName = document.getElementById("invite-name");
-  var inviteProper = document.getElementById("invite-proper");
-  var invitesEl = document.getElementById("invites");
+  var ulUser = document.getElementById("ul-user");
+  var ulTools = document.getElementById("unlock-tools");
+  var ulList = document.getElementById("ul-games");
+  var ulCount = document.getElementById("ul-count");
+  var ulGrade = document.getElementById("ul-grade");
+  var ulMature = document.getElementById("ul-mature");
+  var ulState = null; // { name, games: [ids], unlocked: {id: true} }
 
-  function loadInvites() {
-    return api("GET", "/api/admin/invites").then(function (data) {
-      invitesEl.replaceChildren();
-      if (!data.invites.length) {
-        var none = document.createElement("li");
-        none.className = "empty";
-        none.textContent = "Nobody.";
-        invitesEl.append(none);
-      }
-      data.invites.forEach(function (inv) {
-        var li = document.createElement("li");
-        var p = document.createElement("p");
-        p.className = "meta";
-        var who = document.createElement("strong");
-        who.textContent = inv.adminName;
-        var code = document.createElement("code");
-        code.className = "invite-code";
-        code.textContent = inv.code;
-        p.append(who, " · username " + inv.username + " · code ", code, " · ",
-          linkButton("New code", function (b) {
-            twoStep(b, "Old code stops working. Sure?", function () {
-              api("POST", "/api/admin/invites/" + inv.id + "/new-code").then(function (r) {
-                say("New code for " + inv.adminName + ": " + r.code);
-                return loadInvites();
-              }).catch(fail);
-            });
-          }), " · ",
-          linkButton("Delete", function (b) {
-            twoStep(b, "Really delete?", function () {
-              api("DELETE", "/api/admin/invites/" + inv.id).then(function () {
-                say("Invite for " + inv.adminName + " deleted.");
-                return loadInvites();
-              }).catch(fail);
-            });
-          }));
-        li.append(p);
-        invitesEl.append(li);
-      });
+  function fillStudents(select, users) {
+    var keep = select.value;
+    select.replaceChildren(new Option("Pick a student", ""));
+    users.forEach(function (u) {
+      if (!u.admin) select.append(new Option(shown(u), u.name));
+    });
+    select.value = keep;
+  }
+
+  function title(id) { return titles[id] || id; }
+
+  function renderMature() {
+    ulMature.replaceChildren();
+    document.getElementById("ul-mature-box").hidden = !ulState.mature.length;
+    ulState.mature.slice().sort(function (a, b) {
+      return title(a.id).localeCompare(title(b.id));
+    }).forEach(function (m) {
+      var li = document.createElement("li");
+      li.className = m.allowed ? "allowed" : "blocked";
+      li.textContent = (m.allowed ? "✓ " : "✕ ") + title(m.id) + " · grade " + m.level + "+";
+      ulMature.append(li);
     });
   }
 
-  inviteForm.addEventListener("submit", function (e) {
-    e.preventDefault();
-    var proper = inviteProper.value.trim();
-    var name = inviteName.value.trim();
-    if (!proper) { say("Enter their proper name first."); inviteProper.focus(); return; }
-    if (!name) { say("Pick a username for them."); inviteName.focus(); return; }
-    var button = inviteForm.querySelector("button");
-    button.disabled = true;
-    api("POST", "/api/admin/invites", { properName: proper, username: name }).then(function (r) {
-      say("Invite for " + r.adminName + " (username " + r.username + "): " + r.code +
-          ". Give it to them along with the address of this site.");
-      inviteProper.value = "";
-      inviteName.value = "";
-      inviteProper.focus();
-      return loadInvites();
-    }).catch(fail).then(function () { button.disabled = false; });
+  function renderUnlocks() {
+    var open = ulState.games.filter(function (id) { return ulState.unlocked[id]; }).length;
+    ulCount.textContent = open + " of " + ulState.games.length + " unlocked";
+    ulList.replaceChildren();
+    ulState.games.slice().sort(function (a, b) {
+      return title(a).localeCompare(title(b));
+    }).forEach(function (id) {
+      var li = document.createElement("li");
+      var label = document.createElement("label");
+      var box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = !!ulState.unlocked[id];
+      box.addEventListener("change", function () {
+        setUnlocks([id], box.checked).catch(function () { box.checked = !box.checked; });
+      });
+      label.append(box, " " + title(id));
+      li.append(label);
+      ulList.append(li);
+    });
+  }
+
+  function loadUnlocks() {
+    var name = ulUser.value;
+    if (!name) { ulTools.hidden = true; ulState = null; return Promise.resolve(); }
+    return api("GET", "/api/admin/unlocks/" + encodeURIComponent(name)).then(function (r) {
+      if (ulUser.value !== name) return; // picked someone else meanwhile
+      ulState = { name: r.name, adminName: r.adminName, games: r.games, unlocked: {},
+                  grade: r.grade, mature: r.mature };
+      r.unlocked.forEach(function (id) { ulState.unlocked[id] = true; });
+      ulGrade.value = String(r.grade);
+      renderUnlocks();
+      renderMature();
+      ulTools.hidden = false;
+    }).catch(fail);
+  }
+
+  function setUnlocks(games, unlocked) {
+    var state = ulState;
+    return api("POST", "/api/admin/unlocks",
+               { username: state.name, games: games, unlocked: unlocked }).then(function () {
+      games.forEach(function (id) {
+        if (unlocked) state.unlocked[id] = true; else delete state.unlocked[id];
+      });
+      if (state === ulState) renderUnlocks();
+      say(games.length === 1
+        ? title(games[0]) + (unlocked ? " unlocked" : " locked") + " for " + state.adminName + "."
+        : "All games " + (unlocked ? "unlocked" : "locked") + " for " + state.adminName + ".");
+    }).catch(function (err) { fail(err); throw err; });
+  }
+
+  ulUser.addEventListener("change", loadUnlocks);
+  ulGrade.addEventListener("change", function () {
+    var state = ulState, grade = Number(ulGrade.value);
+    ulGrade.disabled = true;
+    api("POST", "/api/admin/grade", { username: state.name, grade: grade }).then(function (r) {
+      say(r.adminName + " is now in grade " + r.grade + ".");
+      state.grade = r.grade;
+      state.mature.forEach(function (m) { m.allowed = r.grade >= m.level; });
+      if (state === ulState) renderMature();
+    }).catch(function (err) { ulGrade.value = String(state.grade); fail(err); })
+      .then(function () { ulGrade.disabled = false; });
   });
+  document.getElementById("ul-all").addEventListener("click", function (e) {
+    var b = e.currentTarget;
+    twoStep(b, "Unlock every game?", function () {
+      setUnlocks(ulState.games, true).catch(function () {}).then(function () {
+        b.disabled = false; delete b.dataset.armed; b.textContent = "Unlock all";
+      });
+    });
+  });
+  document.getElementById("ul-none").addEventListener("click", function (e) {
+    var b = e.currentTarget;
+    twoStep(b, "Lock every game?", function () {
+      setUnlocks(ulState.games, false).catch(function () {}).then(function () {
+        b.disabled = false; delete b.dataset.armed; b.textContent = "Lock all";
+      });
+    });
+  });
+
+  // ---- game settings: maturity and disabled, for every game
+
+  var gsList = document.getElementById("gs-list");
+  var gsSearch = document.getElementById("gs-search");
+  var gsCount = document.getElementById("gs-count");
+  var MATURITY = [[0, "Not mature"], [1, "Grade 1+"], [2, "Grade 2+"], [3, "Grade 3+"],
+                  [4, "Grade 4+"], [5, "Grade 5+"]];
+
+  function gameRow(g) {
+    var li = document.createElement("li");
+    li.dataset.title = title(g.id).toLowerCase();
+    li.classList.toggle("disabled", g.disabled);
+
+    var name = document.createElement("span");
+    name.className = "gs-name";
+    name.textContent = title(g.id);
+    if (g.hidden) {
+      var tag = document.createElement("span");
+      tag.className = "gs-tag";
+      tag.textContent = "hidden";
+      name.append(" ", tag);
+    }
+
+    var sel = document.createElement("select");
+    sel.setAttribute("aria-label", "Maturity for " + title(g.id));
+    MATURITY.forEach(function (m) { sel.append(new Option(m[1], m[0])); });
+    sel.value = String(g.mature);
+    sel.addEventListener("change", function () {
+      var before = g.mature;
+      sel.disabled = true;
+      api("POST", "/api/admin/games/" + encodeURIComponent(g.id), { mature: Number(sel.value) })
+        .then(function (r) {
+          g.mature = r.mature;
+          say(title(g.id) + ": " + (r.mature ? "grade " + r.mature + " and up." : "not mature."));
+        })
+        .catch(function (err) { sel.value = String(before); fail(err); })
+        .then(function () { sel.disabled = false; });
+    });
+
+    var toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "quiet gs-toggle";
+    function label() { toggle.textContent = g.disabled ? "Enable game" : "Disable game"; }
+    label();
+    toggle.addEventListener("click", function () {
+      toggle.disabled = true;
+      api("POST", "/api/admin/games/" + encodeURIComponent(g.id), { disabled: !g.disabled })
+        .then(function (r) {
+          g.disabled = r.disabled;
+          li.classList.toggle("disabled", g.disabled);
+          label();
+          say(title(g.id) + (g.disabled ? " is disabled for students." : " is back on for students."));
+        })
+        .catch(fail)
+        .then(function () { toggle.disabled = false; });
+    });
+
+    li.append(name, sel, toggle);
+    return li;
+  }
+
+  function filterGames() {
+    var q = gsSearch.value.trim().toLowerCase();
+    var shown = 0, total = 0;
+    gsList.querySelectorAll("li").forEach(function (li) {
+      total++;
+      li.hidden = q && li.dataset.title.indexOf(q) === -1;
+      if (!li.hidden) shown++;
+    });
+    gsCount.textContent = q ? shown + " of " + total : total + " games";
+  }
+  gsSearch.addEventListener("input", filterGames);
+
+  function loadGames() {
+    return api("GET", "/api/admin/games").then(function (data) {
+      gsList.replaceChildren();
+      data.games.slice().sort(function (a, b) {
+        return title(a.id).localeCompare(title(b.id));
+      }).forEach(function (g) { gsList.append(gameRow(g)); });
+      filterGames();
+    });
+  }
 
   // ---- start
 
   api("GET", "/api/me").then(function (data) {
     if (!data.user || !data.user.admin) {
-      say("Admin tools are for admin accounts only.");
+      loadingEl.textContent = "Admin tools are for admin accounts only.";
       return;
     }
-    return Promise.all([loadReports(), loadUsers(), loadInvites()]).then(function () {
-      say("");
+    return Promise.all([loadReports(), loadUsers(), loadGames()]).then(function () {
+      loadingEl.hidden = true;
       tools.hidden = false;
+      showPanel();
     });
-  }).catch(fail);
+  }).catch(function (err) { loadingEl.textContent = err.message; });
 })();
 </script>
 </body>

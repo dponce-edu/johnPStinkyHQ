@@ -170,19 +170,29 @@
     drawn = true;
     render(unlocked, seenKey, orderKey);
   }
-  setTimeout(function () { draw(null); }, 4000);
+  // Mature games (games.js `mature: N`) only show once the server says this
+  // person's grade allows them; without an answer they stay off the page.
+  function withoutMature() {
+    if (!drawn) games = games.filter(function (g) { return !g.mature; });
+  }
+  setTimeout(function () { withoutMature(); draw(null); }, 4000);
   fetch("/api/unlocks", { credentials: "same-origin" })
     .then(function (res) {
       var type = res.headers.get("Content-Type") || "";
       return res.ok && type.indexOf("application/json") !== -1 ? res.json() : null;
     })
     .then(function (data) {
-      if (!data || data.all) return draw(null);
+      if (data && data.all) return draw(null); // admins: everything, open
+      if (!data) { withoutMature(); return draw(null); }
+      // Mature games: open if the grade allows, left out entirely if not.
+      var blocked = {};
+      (data.blocked || []).forEach(function (id) { blocked[id] = true; });
+      if (!drawn) games = games.filter(function (g) { return !blocked[g.id]; });
       var set = {};
-      data.unlocked.forEach(function (id) { set[id] = true; });
+      data.unlocked.concat(data.open || []).forEach(function (id) { set[id] = true; });
       draw(set, "ce-unlocks-seen:" + data.user, "ce-game-order:" + data.user);
     })
-    .catch(function () { draw(null); });
+    .catch(function () { withoutMature(); draw(null); });
 
   // Average ratings from the comments server, if it's running. Locked cards
   // have no data-game, so they never show one.

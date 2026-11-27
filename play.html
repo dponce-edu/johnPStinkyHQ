@@ -192,12 +192,19 @@
 
   // Has this person unlocked the game? Without a server (e.g. GitHub Pages)
   // everything counts as unlocked.
+  // Also: mature games their grade allows count as unlocked (they never lock),
+  // and ones above their grade come back "blocked" and are taken out of
+  // window.GAMES so "Another Game?" can't pick them.
   function unlockedHere(gameId) {
     return fetch("/api/unlocks", { credentials: "same-origin" }).then(function (res) {
       var type = res.headers.get("Content-Type") || "";
       return res.ok && type.indexOf("application/json") !== -1 ? res.json() : null;
     }).then(function (data) {
-      return !data || data.all || data.unlocked.indexOf(gameId) !== -1;
+      if (!data || data.all) return true;
+      var blocked = data.blocked || [];
+      window.GAMES = (window.GAMES || []).filter(function (g) { return blocked.indexOf(g.id) === -1; });
+      if (blocked.indexOf(gameId) !== -1) return "blocked";
+      return data.unlocked.indexOf(gameId) !== -1 || (data.open || []).indexOf(gameId) !== -1;
     }).catch(function () { return true; });
   }
 
@@ -273,6 +280,11 @@
         unlockedHere(game.id)
       ]);
       ready.then(function (results) {
+        if (results[1] === "blocked") {
+          setTitle("Not available");
+          show('This game isn\'t available. <a href="index.html">Pick another game</a>');
+          return;
+        }
         locked = !results[1];
         if (!locked) setTitle(game.title);
         // encodeURI handles file names with spaces

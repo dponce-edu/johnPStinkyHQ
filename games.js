@@ -11,6 +11,13 @@
 //   blurb  optional one-line description on the card
 //   ratio  optional player shape as "width / height". Usually not needed: the
 //          player sizes itself to the game once it loads.
+//   mature optional grade level 1-5, written as a number (mature: 3). A mature
+//          game never sits behind the "?" lock: students at that grade or
+//          above (and admins) see it open; everyone else can't see or load it.
+//          Set a student's grade on the admin page or with
+//          `python3 server/app.py set-grade NAME N`. The admin page's Game
+//          settings can also change a game's maturity (that wins over this
+//          line) or disable a game for every student.
 //
 // Don't rename or move a .swf once people have played it: saves are tied to its path.
 //
@@ -22,9 +29,9 @@
 //
 //   window.GAMES = (window.GAMES || []).concat([
 //     {
-//       id: "secret-game",
-//       title: "Secret Game",
-//       file: "games/hidden/secret-game.swf"
+//       id: "<id>",
+//       title: "<Title>",
+//       file: "games/hidden/<id>.swf"
 //     }
 //   ]).sort(function (a, b) { return a.title.localeCompare(b.title); });
 

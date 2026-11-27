@@ -73,7 +73,8 @@ CREATE TABLE IF NOT EXISTS users (
     screen_name TEXT,                          -- what others see; NULL: the username
     proper_name TEXT NOT NULL DEFAULT '',      -- legal/formal name; admins only
     invite_code TEXT,                          -- set until the student joins
-    hidden_games INTEGER NOT NULL DEFAULT 0    -- may see games/hidden/
+    hidden_games INTEGER NOT NULL DEFAULT 0,   -- may see games/hidden/
+    grade_level INTEGER NOT NULL DEFAULT 1     -- 1-5; mature games need at least theirs
 );
 CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY,
@@ -108,6 +109,14 @@ CREATE TABLE IF NOT EXISTS unlocks (
     game     TEXT NOT NULL,
     created  INTEGER NOT NULL,
     PRIMARY KEY (user_id, game)
+);
+-- Per-game settings from the admin page (Game settings). mature: NULL uses
+-- the game list's own `mature:` value, 0 = not mature, 1-5 = that grade and
+-- up. disabled: no standard account can see or play it.
+CREATE TABLE IF NOT EXISTS game_settings (
+    game     TEXT PRIMARY KEY,
+    mature   INTEGER,
+    disabled INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS reports (
     comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
@@ -145,6 +154,8 @@ def init_db():
         con.execute("ALTER TABLE users ADD COLUMN proper_name TEXT NOT NULL DEFAULT ''")
     if "hidden_games" not in columns:
         con.execute("ALTER TABLE users ADD COLUMN hidden_games INTEGER NOT NULL DEFAULT 0")
+    if "grade_level" not in columns:
+        con.execute("ALTER TABLE users ADD COLUMN grade_level INTEGER NOT NULL DEFAULT 1")
     con.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_by_invite ON users(invite_code)")
     con.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_by_screen_name "
                 "ON users(screen_name COLLATE NOCASE)")
@@ -205,12 +216,12 @@ def proper_name_problem(name):
     return None
 
 
-def create_invite(con, username, proper_name, admin=False):
+def create_invite(con, username, proper_name, admin=False, grade=1):
     code = new_invite_code(con)
     cur = con.execute(
-        "INSERT INTO users (username, password, created, is_admin, invite_code, proper_name) "
-        "VALUES (?, '', ?, ?, ?, ?)",
-        (username, int(time.time()), 1 if admin else 0, code, proper_name))
+        "INSERT INTO users (username, password, created, is_admin, invite_code, proper_name, "
+        "grade_level) VALUES (?, '', ?, ?, ?, ?, ?)",
+        (username, int(time.time()), 1 if admin else 0, code, proper_name, grade))
     return cur.lastrowid, code
 
 
@@ -370,37 +381,126 @@ def has_blocked_word(text):
 HIDDEN_FOLDER = "/games/hidden"
 HIDDEN_LIST = os.path.join(ROOT, "games", "hidden", "games.js")
 
+# Grade levels. Every standard account has one, 1-5. A game marked
+# `mature: N` in its list never sits behind the "?" lock: accounts at grade N
+# or above (and admins) get it open, everyone else can't see or load it.
+GRADES = range(1, 6)
+PUBLIC_LIST = os.path.join(ROOT, "games.js")
+
 _games = {}
 _games_lock = threading.Lock()
 
 
-def _ids_in(path):
-    """Game ids in a games.js-style list, re-read whenever the file changes."""
+def _games_in(path):
+    """{id: {"file": ..., "mature": level or 0}} for a games.js-style list,
+    re-read whenever the file changes. Comment lines are skipped."""
     try:
         mtime = os.path.getmtime(path)
     except OSError:
-        return frozenset()
+        return {}
     with _games_lock:
         cached = _games.get(path)
         if cached is None or cached[0] != mtime:
             with open(path, encoding="utf-8") as f:
-                ids = re.findall(r'\bid:\s*"([a-z0-9-]+)"', f.read())
-            cached = _games[path] = (mtime, frozenset(ids))
+                text = "\n".join(line for line in f.read().splitlines()
+                                 if not line.lstrip().startswith("//"))
+            games = {}
+            for block in re.findall(r"\{([^{}]*)\}", text):
+                gid = re.search(r'\bid:\s*"([a-z0-9-]+)"', block)
+                if not gid:
+                    continue
+                file = re.search(r'\bfile:\s*"([^"]+)"', block)
+                mature = re.search(r"\bmature:\s*([0-9]+)", block)
+                games[gid.group(1)] = {
+                    "file": file.group(1) if file else "",
+                    "mature": int(mature.group(1)) if mature else 0,
+                }
+            cached = _games[path] = (mtime, games)
         return cached[1]
-
-
-def hidden_game_ids():
-    return _ids_in(HIDDEN_LIST)
-
-
-def game_ids(user=None):
-    """Every game this user may see: games.js, plus the hidden ones if allowed."""
-    ids = _ids_in(os.path.join(ROOT, "games.js"))
-    return ids | hidden_game_ids() if may_see_hidden(user) else ids
 
 
 def may_see_hidden(user):
     return bool(user and (user["is_admin"] or user["hidden_games"]))
+
+
+# Admin-page game settings, cached for a couple of seconds so checking every
+# file request doesn't mean a database read each time.
+_settings = {"at": 0.0, "rows": {}}
+_settings_lock = threading.Lock()
+
+
+def game_settings(fresh=False):
+    """{game id: {"mature": None or 0-5, "disabled": bool}}"""
+    with _settings_lock:
+        if fresh or time.time() - _settings["at"] > 2:
+            con = connect()
+            try:
+                rows = con.execute("SELECT game, mature, disabled FROM game_settings").fetchall()
+            finally:
+                con.close()
+            _settings["rows"] = {r["game"]: {"mature": r["mature"], "disabled": bool(r["disabled"])}
+                                 for r in rows}
+            _settings["at"] = time.time()
+        return _settings["rows"]
+
+
+def with_settings(games):
+    """Copies of the list entries with the admin page's settings applied:
+    mature is the level in force, listed_mature what the list file says."""
+    settings = game_settings()
+    out = {}
+    for gid, info in games.items():
+        set_ = settings.get(gid, {})
+        mature = set_.get("mature")
+        out[gid] = dict(info, listed_mature=info["mature"],
+                        mature=info["mature"] if mature is None else mature,
+                        disabled=set_.get("disabled", False))
+    return out
+
+
+def is_admin(user):
+    return bool(user and user["is_admin"])
+
+
+def playable(user, info):
+    """May this user see and play this (listed) game? Admins: always."""
+    return is_admin(user) or (not info["disabled"] and grade_allows(user, info["mature"]))
+
+
+def grade_allows(user, level):
+    """Mature level 0 means not mature: anyone may see it."""
+    return not level or bool(user and (user["is_admin"] or user["grade_level"] >= level))
+
+
+def listed_games(user):
+    """{id: info} for every game in the lists this user may see, ignoring grade."""
+    games = dict(_games_in(PUBLIC_LIST))
+    if may_see_hidden(user):
+        games.update(_games_in(HIDDEN_LIST))
+    return with_settings(games)
+
+
+def game_ids(user=None):
+    """Every game this user may see and play: games.js, plus the hidden ones
+    if allowed, minus mature games above their grade and disabled games
+    (admins keep those)."""
+    return frozenset(gid for gid, info in listed_games(user).items() if playable(user, info))
+
+
+def mature_level(gid, user=None):
+    info = listed_games(user).get(gid)
+    return info["mature"] if info else 0
+
+
+def file_blocked(lowered, user):
+    """lowered: a clean_path()-ed, lower-cased URL path. True if it's the .swf
+    of a game this user may not play: disabled, or mature above their grade."""
+    games = dict(_games_in(PUBLIC_LIST))
+    games.update(_games_in(HIDDEN_LIST))
+    for info in with_settings(games).values():
+        if clean_path(info["file"]).lower() == lowered:
+            return not playable(user, info)
+    return False
 
 
 def is_hidden_path(lowered):
@@ -478,6 +578,11 @@ ROUTES = [
     ("GET", r"/api/admin/users", "admin_users"),
     ("POST", r"/api/admin/timeout", "admin_timeout"),
     ("POST", r"/api/admin/hidden-games", "admin_hidden_games"),
+    ("GET", r"/api/admin/unlocks/([A-Za-z0-9_-]{1,40})", "admin_unlocks"),
+    ("POST", r"/api/admin/unlocks", "admin_set_unlocks"),
+    ("POST", r"/api/admin/grade", "admin_grade"),
+    ("GET", r"/api/admin/games", "admin_games"),
+    ("POST", r"/api/admin/games/" + GAME_ID, "admin_game_settings"),
     ("GET", r"/api/admin/invites", "admin_invites"),
     ("POST", r"/api/admin/invites", "admin_add_invite"),
     ("POST", r"/api/admin/invites/(\d+)/new-code", "admin_new_code"),
@@ -590,7 +695,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
                 return
-            if is_hidden_path(lowered) and not may_see_hidden(user):
+            if (is_hidden_path(lowered) and not may_see_hidden(user)) or \
+                    file_blocked(lowered, user):
                 self.send_error(404)
                 return
         self.revalidate = True
@@ -745,6 +851,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if user:
             # Hidden games: a plain "not found" for everyone not allowed.
             need(not is_hidden_path(lowered) or may_see_hidden(user), 404, "Not found.")
+            need(not file_blocked(lowered, user), 404, "Not found.")
             return 200, {"ok": True}
         self.extra_headers.append(("Location", login_redirect(uri)))
         return 302, {"error": "Log in first."}
@@ -963,7 +1070,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "name": u["username"], "screenName": u["screen_name"],
             "properName": u["proper_name"], "adminName": admin_name(u),
             "admin": bool(u["is_admin"]), "banned": bool(u["banned"]),
-            "hiddenGames": bool(u["hidden_games"]),
+            "hiddenGames": bool(u["hidden_games"]), "grade": u["grade_level"],
             "timeoutUntil": u["timeout_until"] if u["timeout_until"] > now else None,
             "until": until_text(u["timeout_until"]) if u["timeout_until"] > now else None,
         } for u in con.execute("SELECT * FROM users WHERE invite_code IS NULL ORDER BY "
@@ -999,6 +1106,101 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         con.execute("UPDATE users SET hidden_games = ? WHERE id = ?", (int(allowed), user["id"]))
         return 200, {"name": user["username"], "adminName": admin_name(user),
                      "hiddenGames": allowed}
+
+    def admin_target(self, con, name):
+        """A student (not an admin, not a waiting invite) for the admin tools."""
+        user = con.execute("SELECT * FROM users WHERE username = ?", (name,)).fetchone()
+        need(user is not None and user["invite_code"] is None, 404,
+             "No student called %s." % name)
+        need(not user["is_admin"], 400, "Admins can already play every game.")
+        return user
+
+    def api_admin_games(self, con):
+        """Every game in both lists, with its settings."""
+        self.require_admin(con)
+        hidden = set(_games_in(HIDDEN_LIST))
+        games = dict(_games_in(PUBLIC_LIST))
+        games.update(_games_in(HIDDEN_LIST))
+        return 200, {"games": [{
+            "id": gid, "hidden": gid in hidden, "mature": info["mature"],
+            "listedMature": info["listed_mature"], "disabled": info["disabled"],
+        } for gid, info in sorted(with_settings(games).items())]}
+
+    def api_admin_game_settings(self, con, game):
+        """Body: {"mature": 0-5} and/or {"disabled": true/false}."""
+        self.require_admin(con)
+        games = dict(_games_in(PUBLIC_LIST))
+        games.update(_games_in(HIDDEN_LIST))
+        need(game in games, 404, "No such game.")
+        data = self.json_body()
+        mature, disabled = data.get("mature"), data.get("disabled")
+        need(mature is not None or disabled is not None, 400, "Nothing to change.")
+        need(mature is None or (isinstance(mature, int) and not isinstance(mature, bool)
+                                and 0 <= mature <= 5), 400,
+             "Maturity is 0 (not mature) or a grade from 1 to 5.")
+        need(disabled is None or isinstance(disabled, bool), 400, "Bad disabled value.")
+        con.execute("INSERT OR IGNORE INTO game_settings (game) VALUES (?)", (game,))
+        if mature is not None:
+            con.execute("UPDATE game_settings SET mature = ? WHERE game = ?", (mature, game))
+        if disabled is not None:
+            con.execute("UPDATE game_settings SET disabled = ? WHERE game = ?",
+                        (int(disabled), game))
+        con.commit()
+        game_settings(fresh=True)  # take effect now, not in a couple of seconds
+        info = with_settings({game: games[game]})[game]
+        return 200, {"id": game, "mature": info["mature"], "listedMature": info["listed_mature"],
+                     "disabled": info["disabled"]}
+
+    def api_admin_grade(self, con):
+        """Body: {"username": NAME, "grade": 1-5}."""
+        self.require_admin(con)
+        data = self.json_body()
+        name, grade = data.get("username"), data.get("grade")
+        need(isinstance(name, str) and isinstance(grade, int) and grade in GRADES, 400,
+             "Pick a student and a grade from 1 to 5.")
+        user = self.admin_target(con, name)
+        con.execute("UPDATE users SET grade_level = ? WHERE id = ?", (grade, user["id"]))
+        return 200, {"name": user["username"], "adminName": admin_name(user), "grade": grade}
+
+    def api_admin_unlocks(self, con, name):
+        """The games a student has unlocked, and every game they could."""
+        self.require_admin(con)
+        user = self.admin_target(con, name)
+        rows = con.execute("SELECT game FROM unlocks WHERE user_id = ?", (user["id"],))
+        listed = listed_games(user)
+        unlockable = {gid for gid, info in listed.items() if not info["mature"]}
+        return 200, {"name": user["username"], "adminName": admin_name(user),
+                     "grade": user["grade_level"],
+                     "games": sorted(unlockable),
+                     "unlocked": sorted(r["game"] for r in rows if r["game"] in unlockable),
+                     "mature": [{"id": gid, "level": info["mature"],
+                                 "allowed": grade_allows(user, info["mature"])}
+                                for gid, info in sorted(listed.items()) if info["mature"]]}
+
+    def api_admin_set_unlocks(self, con):
+        """Body: {"username": NAME, "games": [id, ...], "unlocked": true/false}."""
+        self.require_admin(con)
+        data = self.json_body()
+        name, games, unlocked = data.get("username"), data.get("games"), data.get("unlocked")
+        need(isinstance(name, str) and isinstance(games, list) and games
+             and all(isinstance(g, str) for g in games) and isinstance(unlocked, bool),
+             400, "Pick a student, some games, and lock or unlock.")
+        user = self.admin_target(con, name)
+        allowed = game_ids(user)
+        unknown = [g for g in games if g not in allowed]
+        need(not unknown, 404, "No such game: %s." % ", ".join(unknown[:3]))
+        mature = [g for g in games if mature_level(g, user)]
+        need(not mature, 400, "Mature games don't unlock; they go by grade.")
+        now = int(time.time())
+        for game in games:
+            if unlocked:
+                con.execute("INSERT OR IGNORE INTO unlocks (user_id, game, created) "
+                            "VALUES (?, ?, ?)", (user["id"], game, now))
+            else:
+                con.execute("DELETE FROM unlocks WHERE user_id = ? AND game = ?",
+                            (user["id"], game))
+        return 200, {"name": user["username"], "adminName": admin_name(user),
+                     "games": games, "unlocked": unlocked}
 
     def api_admin_invites(self, con):
         self.require_admin(con)
@@ -1047,15 +1249,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     # a game unlocks it for that person. Admins see everything.
 
     def api_unlocks(self, con):
+        """unlocked: games this person opened with Play. open: mature games
+        their grade allows (never locked). blocked: games they may not play
+        (mature above their grade, or disabled), which the pages leave out."""
         user = self.require_user(con, "Log in first.")
         rows = con.execute("SELECT game FROM unlocks WHERE user_id = ? ORDER BY created",
                            (user["id"],))
+        listed = listed_games(user)
+        mature = {gid for gid, info in listed.items() if info["mature"]}
+        allowed = game_ids(user)
+        blocked = set(listed) - allowed
         return 200, {"user": user["username"], "all": bool(user["is_admin"]),
-                     "unlocked": [r["game"] for r in rows]}
+                     "unlocked": [r["game"] for r in rows
+                                  if r["game"] not in mature and r["game"] not in blocked],
+                     "open": sorted(mature & allowed),
+                     "blocked": sorted(blocked)}
 
     def api_unlock(self, con, game):
         user = self.require_user(con, "Log in first.")
         self.check_game(game, user)
+        need(not mature_level(game, user), 400, "Mature games don't unlock; they go by grade.")
         cur = con.execute("INSERT OR IGNORE INTO unlocks (user_id, game, created) VALUES (?, ?, ?)",
                           (user["id"], game, int(time.time())))
         return 200, {"game": game, "new": cur.rowcount == 1}
@@ -1191,9 +1404,10 @@ def cmd_add_user(args):
     proper = clean_proper_name(args.proper_name)
     if len(proper) > MAX_PROPER_NAME:
         sys.exit("Proper names can be up to %d characters." % MAX_PROPER_NAME)
-    con.execute("INSERT INTO users (username, password, created, is_admin, proper_name) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (name, hash_password(pin), int(time.time()), 1 if args.admin else 0, proper))
+    con.execute("INSERT INTO users (username, password, created, is_admin, proper_name, "
+                "grade_level) VALUES (?, ?, ?, ?, ?, ?)",
+                (name, hash_password(pin), int(time.time()), 1 if args.admin else 0, proper,
+                 args.grade))
     con.commit()
     kind = "Admin" if args.admin else "User"
     if args.choose:
@@ -1210,7 +1424,7 @@ def cmd_invite(args):
     problem = problem or proper_name_problem(proper)
     if problem:
         sys.exit(problem)
-    _, code = create_invite(con, args.username, proper, admin=args.admin)
+    _, code = create_invite(con, args.username, proper, admin=args.admin, grade=args.grade)
     con.commit()
     print("Invite for %s (%s):  %s" % (proper, args.username, show_code(code)))
     print("They enter it on the Join page (join.html), pick a screen name and a PIN,")
@@ -1352,6 +1566,15 @@ def cmd_reset_unlocks(args):
                                               user["username"]))
 
 
+def cmd_set_grade(args):
+    init_db()
+    con = connect()
+    user = find_user(con, args.username)
+    con.execute("UPDATE users SET grade_level = ? WHERE id = ?", (args.grade, user["id"]))
+    con.commit()
+    print("%s is now in grade %d." % (user["username"], args.grade))
+
+
 def cmd_list_users(args):
     init_db()
     con = connect()
@@ -1362,6 +1585,8 @@ def cmd_list_users(args):
             flags.insert(0, "shows as %s" % u["screen_name"])
         if u["proper_name"]:
             flags.insert(0, u["proper_name"])
+        if not u["is_admin"]:
+            flags.append("grade %d" % u["grade_level"])
         if u["timeout_until"] > time.time():
             flags.append("timeout until " + until_text(u["timeout_until"]))
         print("%4d  %-20s %s  %s" % (u["id"], u["username"],
@@ -1395,10 +1620,12 @@ def main():
     au.add_argument("--admin", action="store_true", help="make the account an admin")
     au.add_argument("--force", action="store_true", help="allow a name the word filter blocks")
     au.add_argument("--proper-name", help="their name as in legal and formal contexts")
+    au.add_argument("--grade", type=int, choices=GRADES, default=1, help="grade level 1-5 (default 1); mature games need at least theirs")
     iv = sub.add_parser("invite", help="make an account and print its invite code")
     iv.add_argument("username", help="what they'll log in with (they pick their screen name)")
     iv.add_argument("proper_name", help='their name as in legal and formal contexts, in quotes')
     iv.add_argument("--admin", action="store_true", help="the account will be an admin")
+    iv.add_argument("--grade", type=int, choices=GRADES, default=1, help="grade level 1-5 (default 1); mature games need at least theirs")
     sub.add_parser("list-invites", help="show invite codes nobody has used yet")
     sp = sub.add_parser("set-proper-name", help="record someone's legal/formal name")
     sp.add_argument("username")
@@ -1426,6 +1653,9 @@ def main():
     ru.add_argument("username")
     ru.add_argument("--game", help="only this game id")
     sub.add_parser("list-users", help="show every account")
+    sg = sub.add_parser("set-grade", help="set a student's grade level (1-5)")
+    sg.add_argument("username")
+    sg.add_argument("grade", type=int, choices=GRADES)
 
     args = parser.parse_args()
     CONFIG["db"] = os.path.abspath(args.db)
@@ -1439,6 +1669,8 @@ def main():
         cmd_set_flag(args, "banned", 1, "%s is banned and logged out.")
     elif args.command == "unban":
         cmd_set_flag(args, "banned", 0, "%s is unbanned.")
+    elif args.command == "set-grade":
+        cmd_set_grade(args)
     elif args.command == "allow-hidden":
         cmd_set_flag(args, "hidden_games", 1, "%s can now see the hidden games.")
     elif args.command == "disallow-hidden":

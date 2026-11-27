@@ -92,6 +92,8 @@ Run these with `sudo -u clubescapade python3 /srv/club-escapade/site/server/app.
 | `add-user NAME` | Makes a ready-to-use account with a random 6-digit PIN, skipping the invite. Add `--proper-name "..."`, `--choose` to type the PIN, `--admin` for an admin |
 | `list-users` | Shows every account with its proper name and screen name |
 | `make-admin NAME` / `remove-admin NAME` | Admins can delete anyone's comment |
+| *(admin page)* **Game settings** | Change any game's maturity level, or disable a game for every standard student. Saved in the database, so no file edits; it overrides `mature:` in `games.js` |
+| `set-grade NAME N` | Sets a student's grade level, 1–5 (new accounts start at 1; `invite` and `add-user` also take `--grade N`). Mature games need at least their grade; see `mature` at the top of `games.js`. Also on the admin page |
 | `allow-hidden NAME` / `disallow-hidden NAME` | Lets them see the hidden games (also a checkbox on the admin page). Admins always can |
 | `timeout NAME MINUTES` / `end-timeout NAME` | Logs them out and keeps them off the site for that long (up to 10080, a week) |
 | `ban NAME` / `unban NAME` | Banning logs them out and hides their comments and ratings |

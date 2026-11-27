@@ -142,16 +142,6 @@ a:focus-visible, button:focus-visible {
 .empty { color: var(--muted); }
 
 /* ---------- Player page ---------- */
-/* "All games" link (and the unlocked note) above the game window. */
-.topbar {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: .25rem;
-  margin-bottom: 1rem;
-}
-.topbar h1 { margin: 0; }
-
 /* The game window, styled like Windows 95: grey raised frame, navy title bar
    with the game's name, and square bevelled buttons (mute, restart, full
    screen) where Windows had minimize, maximize and close.
@@ -521,16 +511,98 @@ button:disabled { opacity: .5; cursor: progress; }
   padding: .6rem .9rem;
 }
 .comments li.empty { color: var(--muted); }
-.hidden-access label { display: flex; gap: .6rem; align-items: center; cursor: pointer; }
-.hidden-access input { width: 1.1rem; height: 1.1rem; accent-color: var(--accent); }
 .comments .meta { color: var(--muted); font-size: .9rem; }
 .comments .meta strong { color: var(--ink); }
 .comments .flagged { color: #ff6666; font-weight: 600; }
 .comments .actions { margin: .4rem 0 0; }
 
 /* ---------- Admin tools (admin.html) ---------- */
-.admin { max-width: 640px; margin: 0 auto; }
-.admin section { margin-top: 1.5rem; }
+/* Admin page: "Student Actions" sidebar on the left, the chosen tool on the
+   right. Narrow screens: sidebar on top. */
+.admin-layout {
+  display: grid;
+  grid-template-columns: 16rem minmax(0, 1fr);
+  gap: 2rem;
+  align-items: start;
+  text-align: left;
+}
+.admin-sidebar {
+  position: sticky;
+  top: calc(var(--bar-h) + 1.25rem);
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  padding: 1rem;
+  background: rgba(0, 0, 0, .85);
+  border: 2px solid var(--bezel);
+}
+.admin-sidebar h2 { font-size: 1.2rem; margin: 0 0 .5rem; }
+.side-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .5rem;
+  padding: .6rem .75rem;
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+  border: 2px solid var(--bezel);
+}
+.side-item:hover { border-color: var(--accent); }
+.side-item[aria-current="page"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+  text-shadow: none;
+}
+.side-count {
+  min-width: 1.6rem;
+  padding: 0 .35rem;
+  background: var(--accent-ink);
+  color: var(--ink);
+  text-align: center;
+  font-size: .85rem;
+}
+@media (max-width: 760px) {
+  .admin-layout { grid-template-columns: 1fr; gap: 1rem; }
+  .admin-sidebar { position: static; }
+}
+.admin { min-width: 0; }
+.admin #status:empty { display: none; }
+.admin-panel h2:first-child { margin-top: 0; }
+.admin .timeout-form { justify-content: flex-start; }
+.unlock-summary { margin: 1rem 0 .5rem; }
+.unlock-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: .25rem 1rem;
+}
+.unlock-list label { display: flex; gap: .5rem; align-items: center; cursor: pointer; }
+.unlock-list input { width: 1.05rem; height: 1.05rem; flex-shrink: 0; accent-color: var(--accent); }
+.mature-list li.blocked { color: var(--muted); }
+.admin-sidebar .side-group { margin-top: 1rem; }
+.game-settings { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: .35rem; }
+.game-settings li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 9.5rem 9.5rem;
+  gap: .75rem;
+  align-items: center;
+  padding: .35rem .6rem;
+  border: 2px solid var(--bezel);
+  background: rgba(0, 0, 0, .85);
+}
+.game-settings li.disabled { border-style: dashed; }
+.game-settings li.disabled .gs-name { color: var(--muted); text-decoration: line-through; }
+.gs-tag { font-size: .75rem; padding: 0 .3rem; border: 1px solid var(--bezel); color: var(--muted); }
+.gs-toggle { padding: .35rem .5rem; font-size: .9rem; }
+.game-settings li.disabled .gs-toggle { background: var(--accent); color: var(--accent-ink); text-shadow: none; }
+@media (max-width: 760px) {
+  .game-settings li { grid-template-columns: 1fr 1fr; }
+  .gs-name { grid-column: 1 / -1; }
+}
 .admin h2 { font-size: 1.2rem; margin: 0 0 .5rem; }
 .admin h3 { font-size: 1rem; margin: 1.25rem 0 .25rem; }
 .admin .comments { margin-top: .5rem; }
@@ -542,17 +614,6 @@ button:disabled { opacity: .5; cursor: progress; }
   justify-content: center;
 }
 .timeout-form select { min-width: 9rem; }
-.invite-form {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: .5rem .75rem;
-  align-items: center;
-  max-width: 26rem;
-  margin: 0 auto;
-  text-align: left;
-}
-.invite-form button { grid-column: 2; justify-self: start; }
-.invite-code { color: var(--ink); font-weight: 600; letter-spacing: .08em; }
 
 /* ---------- Join with an invite code (join.html) ---------- */
 .code-input { font-size: 1.6rem; text-align: center; letter-spacing: .15em; text-transform: uppercase; }
