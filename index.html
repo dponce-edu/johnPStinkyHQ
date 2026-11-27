@@ -15,6 +15,7 @@
     <p id="account-bar" class="account-bar" hidden>
       Logged in as <strong id="account-name"></strong> ·
       <button id="logout" type="button" class="link">Log out</button>
+      <span id="admin-link" hidden>· <a href="admin.html">Admin tools</a></span>
     </p>
   </header>
 
@@ -88,6 +89,7 @@
       if (!data || !data.user) return;
       document.getElementById("account-name").textContent = data.user.name;
       document.getElementById("account-bar").hidden = false;
+      document.getElementById("admin-link").hidden = !data.user.admin;
     })
     .catch(function () {});
   document.getElementById("logout").addEventListener("click", function () {

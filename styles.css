@@ -224,7 +224,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .7); }
 }
 .stars button.on, .stars button:hover { color: var(--ink); }
 
-input[type="text"], input[type="password"], textarea {
+input[type="text"], input[type="password"], textarea, select {
   font: inherit;
   color: var(--ink);
   background: #000;
@@ -313,6 +313,22 @@ button:disabled { opacity: .5; cursor: progress; }
 .comments .meta { color: var(--muted); font-size: .9rem; }
 .comments .meta strong { color: var(--ink); }
 .comments .flagged { color: #ff6666; font-weight: 600; }
+.comments .actions { margin: .4rem 0 0; }
+
+/* ---------- Admin tools (admin.html) ---------- */
+.admin { max-width: 640px; margin: 0 auto; }
+.admin section { margin-top: 1.5rem; }
+.admin h2 { font-size: 1.2rem; margin: 0 0 .5rem; }
+.admin h3 { font-size: 1rem; margin: 1.25rem 0 .25rem; }
+.admin .comments { margin-top: .5rem; }
+.timeout-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  align-items: center;
+  justify-content: center;
+}
+.timeout-form select { min-width: 9rem; }
 .comments .body { margin-top: .3rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .card .rating { color: var(--ink); font-size: .9rem; margin-top: .3rem; }

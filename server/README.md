@@ -87,12 +87,22 @@ Run these with `sudo -u clubescapade python3 /srv/club-escapade/site/server/app.
 | `add-user NAME` | Creates an account and prints a random 6-digit PIN to give the student. Add `--choose` to type one yourself, `--admin` for an admin |
 | `list-users` | Shows every account |
 | `make-admin NAME` / `remove-admin NAME` | Admins can delete anyone's comment |
+| `timeout NAME MINUTES` / `end-timeout NAME` | Logs them out and keeps them off the site for that long (up to 10080, a week) |
 | `ban NAME` / `unban NAME` | Banning logs them out and hides their comments and ratings |
 | `list-comments` | Shows the 20 newest comments with their IDs and report counts. Add `--reported`, `--game ID`, `--user NAME` or `-n 50` to narrow or widen it |
 | `delete-comment ID` | Deletes one comment |
 | `reset-pin NAME` | Gives them a new random PIN and logs them out everywhere. Add `--choose` to type one yourself |
 | `clear-reports ID` | Keeps a reported comment and drops its reports |
 | `clear-saves NAME` | Deletes all of someone's game saves. Add `--game ID` for just one game |
+
+**Admin tools page:** admins get an "Admin tools" link on the homepage
+(`admin.html`). It lists reported comments, most-reported first, with buttons
+to delete one, dismiss its reports, or time out its author. It also has a
+form to time out any student for 15 minutes, 1 hour, 1 day or 1 week, and a
+list of current timeouts with "End now". A timed-out student is logged out at
+once. If they try to log in, they see when the timeout ends, in the Pi's time
+zone (set it with `sudo raspi-config` → Localisation if the times look off).
+Their comments stay up. Admins can't be timed out.
 
 **Reports:** logged-in users can report anyone else's comment, once each. Reported
 comments stay up until you act. Admins see a red "⚑ N reports" on them on the

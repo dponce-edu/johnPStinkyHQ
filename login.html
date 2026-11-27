@@ -60,9 +60,12 @@
   var busy = false;
 
   // Go back to the page that sent us here, but only to a page on this site.
-  function next() {
+  // Admins headed for the homepage land on the admin tools instead.
+  function next(user) {
     var n = new URLSearchParams(location.search).get("next") || "/";
-    return /^\/(?![\/\\])/.test(n) ? n : "/";
+    if (!/^\/(?![\/\\])/.test(n)) n = "/";
+    if (user && user.admin && (n === "/" || n === "/index.html")) n = "/admin.html";
+    return n;
   }
 
   function json(res) {
@@ -76,7 +79,7 @@
 
   // Already logged in (e.g. pressed Back): skip the form.
   fetch("/api/me", { credentials: "same-origin" }).then(json).then(function (data) {
-    if (data.user) location.replace(next());
+    if (data.user) location.replace(next(data.user));
   }).catch(function () {});
 
   // Light up the on-screen key a keyboard press matches.
@@ -120,8 +123,8 @@
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: name, pin: pinEl.value })
-    }).then(json).then(function () {
-      location.replace(next());
+    }).then(json).then(function (data) {
+      location.replace(next(data.user));
     }).catch(function (err) {
       msg.textContent = err.message;
       busy = false;

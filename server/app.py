@@ -67,7 +67,8 @@ CREATE TABLE IF NOT EXISTS users (
     password  TEXT NOT NULL,
     created   INTEGER NOT NULL,
     is_admin  INTEGER NOT NULL DEFAULT 0,
-    banned    INTEGER NOT NULL DEFAULT 0
+    banned    INTEGER NOT NULL DEFAULT 0,
+    timeout_until INTEGER NOT NULL DEFAULT 0  -- can't use the site until then
 );
 CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY,
@@ -120,8 +121,35 @@ def init_db():
     con = connect()
     con.execute("PRAGMA journal_mode = WAL")  # readers don't block the writer
     con.executescript(SCHEMA)
+    # Databases made before timeouts existed: add the column.
+    columns = [r["name"] for r in con.execute("PRAGMA table_info(users)")]
+    if "timeout_until" not in columns:
+        con.execute("ALTER TABLE users ADD COLUMN timeout_until INTEGER NOT NULL DEFAULT 0")
     con.commit()
     con.close()
+
+
+# Timeout lengths offered on the admin page, in minutes (up to a week).
+TIMEOUT_CHOICES = (15, 60, 24 * 60, 7 * 24 * 60)
+MAX_TIMEOUT_MINUTES = 7 * 24 * 60
+
+
+def until_text(ts):
+    """'3:45 PM' today, otherwise 'Fri Nov 28, 3:45 PM' (the Pi's time zone)."""
+    t = time.localtime(ts)
+    clock = time.strftime("%I:%M %p", t).lstrip("0")
+    if time.strftime("%Y-%m-%d", t) == time.strftime("%Y-%m-%d"):
+        return clock
+    return time.strftime("%a %b ", t) + str(t.tm_mday) + ", " + clock
+
+
+def set_timeout(con, user_id, minutes):
+    """Start (minutes > 0) or end (0) a timeout. Starting one logs them out."""
+    until = int(time.time()) + minutes * 60 if minutes > 0 else 0
+    con.execute("UPDATE users SET timeout_until = ? WHERE id = ?", (until, user_id))
+    if until:
+        con.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+    return until
 
 
 # ---------------------------------------------------------------- passwords
@@ -322,6 +350,11 @@ ROUTES = [
     ("POST", r"/api/comments/(\d+)/report", "report_comment"),
     ("GET", r"/api/saves", "saves"),
     ("POST", r"/api/saves", "update_saves"),
+    # Admin tools page (admin.html). Every one checks the user is an admin.
+    ("GET", r"/api/admin/reports", "admin_reports"),
+    ("POST", r"/api/admin/comments/(\d+)/clear-reports", "admin_clear_reports"),
+    ("GET", r"/api/admin/users", "admin_users"),
+    ("POST", r"/api/admin/timeout", "admin_timeout"),
 ]
 
 # Never served by --dev, even though they sit in the site folder.
@@ -501,12 +534,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return None
         return con.execute(
             "SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id "
-            "WHERE s.token_hash = ? AND s.expires > ? AND u.banned = 0",
-            (token_hash(token), int(time.time()))).fetchone()
+            "WHERE s.token_hash = ? AND s.expires > ? AND u.banned = 0 "
+            "AND u.timeout_until <= ?",
+            (token_hash(token), int(time.time()), int(time.time()))).fetchone()
 
     def require_user(self, con, message):
         user = self.current_user(con)
         need(user is not None, 401, message)
+        return user
+
+    def require_admin(self, con):
+        user = self.require_user(con, "Log in first.")
+        need(user["is_admin"], 403, "Admins only.")
         return user
 
     def start_session(self, con, user_id):
@@ -572,6 +611,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             LIMITS.add(user_key)
             raise ApiError(401, "Wrong username or PIN.")
         need(not user["banned"], 403, "This account has been banned.")
+        need(user["timeout_until"] <= time.time(), 403,
+             "You're in a timeout until %s." % until_text(user["timeout_until"]))
         self.start_session(con, user["id"])
         return 200, {"user": public_user(user)}
 
@@ -675,6 +716,53 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         con.execute("INSERT OR IGNORE INTO reports (comment_id, user_id, created) "
                     "VALUES (?, ?, ?)", (int(comment_id), user["id"], int(time.time())))
         return 200, {"reported": int(comment_id)}
+
+    # -- API: admin tools page
+
+    def api_admin_reports(self, con):
+        self.require_admin(con)
+        rows = con.execute(
+            "SELECT c.id, c.game, c.body, c.created, u.username, u.banned, "
+            "u.timeout_until, COUNT(r.user_id) AS reports, MAX(r.created) AS last_report "
+            "FROM comments c JOIN users u ON u.id = c.user_id "
+            "JOIN reports r ON r.comment_id = c.id "
+            "GROUP BY c.id ORDER BY reports DESC, last_report DESC").fetchall()
+        now = time.time()
+        return 200, {"comments": [{
+            "id": r["id"], "game": r["game"], "user": r["username"], "body": r["body"],
+            "created": r["created"], "reports": r["reports"], "lastReport": r["last_report"],
+            "banned": bool(r["banned"]),
+            "timeoutUntil": r["timeout_until"] if r["timeout_until"] > now else None,
+        } for r in rows]}
+
+    def api_admin_clear_reports(self, con, comment_id):
+        self.require_admin(con)
+        con.execute("DELETE FROM reports WHERE comment_id = ?", (int(comment_id),))
+        return 200, {"cleared": int(comment_id)}
+
+    def api_admin_users(self, con):
+        self.require_admin(con)
+        now = time.time()
+        return 200, {"choices": TIMEOUT_CHOICES, "users": [{
+            "name": u["username"], "admin": bool(u["is_admin"]), "banned": bool(u["banned"]),
+            "timeoutUntil": u["timeout_until"] if u["timeout_until"] > now else None,
+            "until": until_text(u["timeout_until"]) if u["timeout_until"] > now else None,
+        } for u in con.execute("SELECT * FROM users ORDER BY username COLLATE NOCASE")]}
+
+    def api_admin_timeout(self, con):
+        """Body: {"username": NAME, "minutes": N}. 0 minutes ends a timeout."""
+        admin = self.require_admin(con)
+        data = self.json_body()
+        name, minutes = data.get("username"), data.get("minutes")
+        need(isinstance(name, str) and isinstance(minutes, int)
+             and 0 <= minutes <= MAX_TIMEOUT_MINUTES, 400, "Pick a student and a length.")
+        user = con.execute("SELECT * FROM users WHERE username = ?", (name,)).fetchone()
+        need(user is not None, 404, "No student called %s." % name)
+        need(user["id"] != admin["id"], 400, "You can't time yourself out.")
+        need(not user["is_admin"], 400, "Admins can't be timed out.")
+        until = set_timeout(con, user["id"], minutes)
+        return 200, {"name": user["username"], "timeoutUntil": until or None,
+                     "until": until_text(until) if until else None}
 
     # -- API: Flash game saves
 
@@ -894,11 +982,29 @@ def cmd_clear_reports(args):
     print("Cleared %d report%s on comment %d." % (cur.rowcount, "" if cur.rowcount == 1 else "s", args.id))
 
 
+def cmd_timeout(args):
+    init_db()
+    con = connect()
+    user = find_user(con, args.username)
+    if user["is_admin"]:
+        sys.exit("Admins can't be timed out.")
+    if not 0 <= args.minutes <= MAX_TIMEOUT_MINUTES:
+        sys.exit("Timeouts are 0 to %d minutes (a week)." % MAX_TIMEOUT_MINUTES)
+    until = set_timeout(con, user["id"], args.minutes)
+    con.commit()
+    if until:
+        print("%s is timed out until %s and logged out." % (user["username"], until_text(until)))
+    else:
+        print("%s's timeout is over." % user["username"])
+
+
 def cmd_list_users(args):
     init_db()
     con = connect()
     for u in con.execute("SELECT * FROM users ORDER BY id"):
         flags = [f for f, on in (("admin", u["is_admin"]), ("banned", u["banned"])) if on]
+        if u["timeout_until"] > time.time():
+            flags.append("timeout until " + until_text(u["timeout_until"]))
         print("%4d  %-20s %s  %s" % (u["id"], u["username"],
                                      time.strftime("%Y-%m-%d", time.localtime(u["created"])),
                                      " ".join(flags)))
@@ -942,6 +1048,10 @@ def main():
     lc.add_argument("--reported", action="store_true", help="only comments someone reported")
     sub.add_parser("clear-reports", help="keep a reported comment and drop its reports"
                    ).add_argument("id", type=int)
+    to = sub.add_parser("timeout", help="keep a user off the site for a while")
+    to.add_argument("username")
+    to.add_argument("minutes", type=int, help="how long; 0 ends a timeout")
+    sub.add_parser("end-timeout", help="let a timed-out user back in").add_argument("username")
     sub.add_parser("list-users", help="show every account")
 
     args = parser.parse_args()
@@ -968,6 +1078,11 @@ def main():
         cmd_list_comments(args)
     elif args.command == "clear-reports":
         cmd_clear_reports(args)
+    elif args.command == "timeout":
+        cmd_timeout(args)
+    elif args.command == "end-timeout":
+        args.minutes = 0
+        cmd_timeout(args)
     elif args.command == "list-users":
         cmd_list_users(args)
 
