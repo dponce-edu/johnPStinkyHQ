@@ -8,11 +8,14 @@
 </head>
 <body>
 
-<div class="wrap">
+<div class="wrap wide">
   <div class="topbar">
     <a class="back" href="index.html">&larr; All games</a>
   </div>
 
+  <!-- The game on the left, comments and ratings on the right. The game gets
+       first claim on the width; comments take what's left. -->
+  <div class="play-layout">
   <!-- The game sits in a Windows 95-style window. The title bar shows the
        game's name; its buttons are mute, restart and full screen. -->
   <main class="bezel win95">
@@ -67,6 +70,7 @@
     <p id="community-msg" class="muted" role="status" aria-live="polite"></p>
     <ul id="comments" class="comments"></ul>
   </section>
+  </div>
 </div>
 
 <dialog id="confirm-restart">
@@ -92,6 +96,8 @@
   var message = document.getElementById("message");
   var titleEl = document.getElementById("title");
   var player = null;
+  // No right-click menu anywhere on the game.
+  stage.addEventListener("contextmenu", function (e) { e.preventDefault(); }, true);
   var last = null;
   var locked = false; // this person hasn't unlocked this game yet
 
@@ -136,8 +142,10 @@
     hideMessage();
     // openUrlMode "deny": stop games from opening links or redirecting the page
     // (Flash getURL / navigateToURL). Use "confirm" to ask the player instead.
+    // contextMenu "off": no Ruffle right-click menu (the stage listener above
+    // also blocks the browser's own menu).
     // A locked game waits for Ruffle's big Play button; pressing it unlocks.
-    var options = Object.assign({ openUrlMode: "deny" }, source,
+    var options = Object.assign({ openUrlMode: "deny", contextMenu: "off" }, source,
                                 locked ? { autoplay: "off" } : {});
     var result = ensurePlayer().load(options);
     if (locked) watchForPlay();

@@ -149,7 +149,8 @@ a:focus-visible, button:focus-visible {
   --w95-shadow: #808080;
   --w95-dark: #000000;
   margin-inline: auto;
-  width: min(100%, max(320px, (100vh - 13rem) * var(--ar-num) + 12px));
+  width: max(320px, (100vh - 13rem) * var(--ar-num) + 12px);
+  max-width: 100%;
   transition: width .2s ease;
 }
 .win95 {
@@ -291,6 +292,32 @@ dialog {
 }
 dialog p { margin: 0; }
 dialog::backdrop { background: rgba(0, 0, 0, .7); }
+
+/* ---------- Player page layout ---------- */
+/* Game window on the left, comments column on the right. The window keeps
+   the size it wants (as big as the screen height allows) and only shrinks if
+   the comments would get narrower than 15rem; comments get the rest. On
+   narrow screens they stack: game first, comments below. */
+.wrap.wide { max-width: 1500px; }
+.play-layout {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  justify-content: center;
+}
+.play-layout .bezel { flex: 0 1 auto; min-width: 280px; margin-inline: 0; }
+.play-layout .community {
+  flex: 1 1 15rem;
+  min-width: 15rem;
+  max-width: 640px;
+  margin: 0;
+}
+.play-layout .community h2:first-child { margin-top: 0; }
+@media (max-width: 800px) {
+  .play-layout { flex-direction: column; align-items: center; }
+  .play-layout .bezel { min-width: 0; }
+  .play-layout .community { width: 100%; min-width: 0; margin-top: 1rem; }
+}
 
 /* ---------- Ratings, comments and log-in (comments.js) ---------- */
 .community {
