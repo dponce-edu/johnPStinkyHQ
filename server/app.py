@@ -118,6 +118,14 @@ CREATE TABLE IF NOT EXISTS game_settings (
     mature   INTEGER,
     disabled INTEGER NOT NULL DEFAULT 0
 );
+-- What admins did on the admin page (Admin log), newest last.
+CREATE TABLE IF NOT EXISTS admin_log (
+    id       INTEGER PRIMARY KEY,
+    created  INTEGER NOT NULL,
+    admin_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    admin    TEXT NOT NULL,   -- their name then, kept if the account goes
+    action   TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS reports (
     comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
     user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -236,12 +244,17 @@ def admin_name(row):
 
 
 # Timeout lengths offered on the admin page, in minutes (up to a week).
-TIMEOUT_CHOICES = (15, 60, 24 * 60, 7 * 24 * 60)
+TIMEOUT_CHOICES = (15, 60, 24 * 60, 7 * 24 * 60, -1)  # -1: indefinitely
 MAX_TIMEOUT_MINUTES = 7 * 24 * 60
+INDEFINITE = -1
+FOREVER = 253402300799  # timeout_until for "indefinitely": the last second of 9999
 
 
 def until_text(ts):
-    """'3:45 PM' today, otherwise 'Fri Nov 28, 3:45 PM' (the Pi's time zone)."""
+    """'3:45 PM' today, otherwise 'Fri Nov 28, 3:45 PM' (the Pi's time zone).
+    An indefinite timeout reads 'further notice'."""
+    if ts >= FOREVER:
+        return "further notice"
     t = time.localtime(ts)
     clock = time.strftime("%I:%M %p", t).lstrip("0")
     if time.strftime("%Y-%m-%d", t) == time.strftime("%Y-%m-%d"):
@@ -249,9 +262,20 @@ def until_text(ts):
     return time.strftime("%a %b ", t) + str(t.tm_mday) + ", " + clock
 
 
+def length_text(minutes):
+    for size, word in ((10080, "week"), (1440, "day"), (60, "hour"), (1, "minute")):
+        if minutes % size == 0:
+            n = minutes // size
+            return "%d %s%s" % (n, word, "" if n == 1 else "s")
+
+
 def set_timeout(con, user_id, minutes):
-    """Start (minutes > 0) or end (0) a timeout. Starting one logs them out."""
-    until = int(time.time()) + minutes * 60 if minutes > 0 else 0
+    """Start (minutes > 0, or INDEFINITE) or end (0) a timeout. Starting one
+    logs them out."""
+    if minutes == INDEFINITE:
+        until = FOREVER
+    else:
+        until = int(time.time()) + minutes * 60 if minutes > 0 else 0
     con.execute("UPDATE users SET timeout_until = ? WHERE id = ?", (until, user_id))
     if until:
         con.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
@@ -410,8 +434,10 @@ def _games_in(path):
                 if not gid:
                     continue
                 file = re.search(r'\bfile:\s*"([^"]+)"', block)
+                title = re.search(r'\btitle:\s*"((?:[^"\\]|\\.)*)"', block)
                 mature = re.search(r"\bmature:\s*([0-9]+)", block)
                 games[gid.group(1)] = {
+                    "title": title.group(1).replace('\\"', '"') if title else gid.group(1),
                     "file": file.group(1) if file else "",
                     "mature": int(mature.group(1)) if mature else 0,
                 }
@@ -456,6 +482,18 @@ def with_settings(games):
                         mature=info["mature"] if mature is None else mature,
                         disabled=set_.get("disabled", False))
     return out
+
+
+def game_title(gid):
+    games = dict(_games_in(PUBLIC_LIST))
+    games.update(_games_in(HIDDEN_LIST))
+    return games[gid]["title"] if gid in games else gid
+
+
+def log_admin(con, admin, action):
+    """One line in the Admin log for something an admin did on the admin page."""
+    con.execute("INSERT INTO admin_log (created, admin_id, admin, action) VALUES (?, ?, ?, ?)",
+                (int(time.time()), admin["id"], admin_name(admin), action))
 
 
 def is_admin(user):
@@ -582,6 +620,7 @@ ROUTES = [
     ("POST", r"/api/admin/unlocks", "admin_set_unlocks"),
     ("POST", r"/api/admin/grade", "admin_grade"),
     ("GET", r"/api/admin/games", "admin_games"),
+    ("GET", r"/api/admin/log", "admin_log"),
     ("POST", r"/api/admin/games/" + GAME_ID, "admin_game_settings"),
     ("GET", r"/api/admin/invites", "admin_invites"),
     ("POST", r"/api/admin/invites", "admin_add_invite"),
@@ -1023,6 +1062,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         need(row is not None, 404, "That comment is already gone.")
         need(row["user_id"] == user["id"] or user["is_admin"], 403,
              "You can only delete your own comments.")
+        if row["user_id"] != user["id"]:  # an admin removing someone else's
+            info = con.execute("SELECT c.game, c.body, u.* FROM comments c JOIN users u "
+                               "ON u.id = c.user_id WHERE c.id = ?", (int(comment_id),)).fetchone()
+            body = info["body"] if len(info["body"]) <= 80 else info["body"][:77] + "..."
+            log_admin(con, user, 'Deleted %s\'s comment on %s: "%s"'
+                      % (admin_name(info), game_title(info["game"]), body))
         con.execute("DELETE FROM comments WHERE id = ?", (int(comment_id),))
         return 200, {"deleted": int(comment_id)}
 
@@ -1059,7 +1104,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         } for r in rows]}
 
     def api_admin_clear_reports(self, con, comment_id):
-        self.require_admin(con)
+        admin = self.require_admin(con)
+        info = con.execute("SELECT c.game, u.* FROM comments c JOIN users u ON u.id = c.user_id "
+                           "WHERE c.id = ?", (int(comment_id),)).fetchone()
+        if info:
+            log_admin(con, admin, "Dismissed reports on %s's comment on %s (kept it)"
+                      % (admin_name(info), game_title(info["game"])))
         con.execute("DELETE FROM reports WHERE comment_id = ?", (int(comment_id),))
         return 200, {"cleared": int(comment_id)}
 
@@ -1082,20 +1132,28 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         data = self.json_body()
         name, minutes = data.get("username"), data.get("minutes")
         need(isinstance(name, str) and isinstance(minutes, int)
-             and 0 <= minutes <= MAX_TIMEOUT_MINUTES, 400, "Pick a student and a length.")
+             and (0 <= minutes <= MAX_TIMEOUT_MINUTES or minutes == INDEFINITE), 400,
+             "Pick a student and a length.")
         user = con.execute("SELECT * FROM users WHERE username = ?", (name,)).fetchone()
         need(user is not None and user["invite_code"] is None, 404,
              "No student called %s." % name)
         need(user["id"] != admin["id"], 400, "You can't time yourself out.")
         need(not user["is_admin"], 400, "Admins can't be timed out.")
         until = set_timeout(con, user["id"], minutes)
+        if not until:
+            log_admin(con, admin, "Ended %s's timeout" % admin_name(user))
+        elif minutes == INDEFINITE:
+            log_admin(con, admin, "Timed out %s indefinitely" % admin_name(user))
+        else:
+            log_admin(con, admin, "Timed out %s for %s (until %s)"
+                      % (admin_name(user), length_text(minutes), until_text(until)))
         return 200, {"name": user["username"], "adminName": admin_name(user),
                      "timeoutUntil": until or None,
                      "until": until_text(until) if until else None}
 
     def api_admin_hidden_games(self, con):
         """Body: {"username": NAME, "allowed": true/false}."""
-        self.require_admin(con)
+        admin = self.require_admin(con)
         data = self.json_body()
         name, allowed = data.get("username"), data.get("allowed")
         need(isinstance(name, str) and isinstance(allowed, bool), 400,
@@ -1104,6 +1162,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         need(user is not None and user["invite_code"] is None, 404,
              "No student called %s." % name)
         con.execute("UPDATE users SET hidden_games = ? WHERE id = ?", (int(allowed), user["id"]))
+        log_admin(con, admin, ("Let %s see the hidden games" if allowed
+                               else "Took the hidden games away from %s") % admin_name(user))
         return 200, {"name": user["username"], "adminName": admin_name(user),
                      "hiddenGames": allowed}
 
@@ -1114,6 +1174,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
              "No student called %s." % name)
         need(not user["is_admin"], 400, "Admins can already play every game.")
         return user
+
+    def api_admin_log(self, con):
+        """The 300 newest Admin log lines, newest first."""
+        self.require_admin(con)
+        rows = con.execute("SELECT created, admin, action FROM admin_log "
+                           "ORDER BY id DESC LIMIT 300").fetchall()
+        return 200, {"log": [{"created": r["created"], "admin": r["admin"], "action": r["action"]}
+                             for r in rows]}
 
     def api_admin_games(self, con):
         """Every game in both lists, with its settings."""
@@ -1128,7 +1196,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def api_admin_game_settings(self, con, game):
         """Body: {"mature": 0-5} and/or {"disabled": true/false}."""
-        self.require_admin(con)
+        admin = self.require_admin(con)
         games = dict(_games_in(PUBLIC_LIST))
         games.update(_games_in(HIDDEN_LIST))
         need(game in games, 404, "No such game.")
@@ -1140,11 +1208,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
              "Maturity is 0 (not mature) or a grade from 1 to 5.")
         need(disabled is None or isinstance(disabled, bool), 400, "Bad disabled value.")
         con.execute("INSERT OR IGNORE INTO game_settings (game) VALUES (?)", (game,))
+        name = game_title(game)
         if mature is not None:
             con.execute("UPDATE game_settings SET mature = ? WHERE game = ?", (mature, game))
+            log_admin(con, admin, "Set %s to %s" % (
+                name, "grade %d and up" % mature if mature else "not mature"))
         if disabled is not None:
             con.execute("UPDATE game_settings SET disabled = ? WHERE game = ?",
                         (int(disabled), game))
+            log_admin(con, admin, "%s %s for students" % ("Disabled" if disabled else "Enabled",
+                                                          name))
         con.commit()
         game_settings(fresh=True)  # take effect now, not in a couple of seconds
         info = with_settings({game: games[game]})[game]
@@ -1153,13 +1226,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def api_admin_grade(self, con):
         """Body: {"username": NAME, "grade": 1-5}."""
-        self.require_admin(con)
+        admin = self.require_admin(con)
         data = self.json_body()
         name, grade = data.get("username"), data.get("grade")
         need(isinstance(name, str) and isinstance(grade, int) and grade in GRADES, 400,
              "Pick a student and a grade from 1 to 5.")
         user = self.admin_target(con, name)
         con.execute("UPDATE users SET grade_level = ? WHERE id = ?", (grade, user["id"]))
+        log_admin(con, admin, "Set %s's grade to %d" % (admin_name(user), grade))
         return 200, {"name": user["username"], "adminName": admin_name(user), "grade": grade}
 
     def api_admin_unlocks(self, con, name):
@@ -1179,7 +1253,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def api_admin_set_unlocks(self, con):
         """Body: {"username": NAME, "games": [id, ...], "unlocked": true/false}."""
-        self.require_admin(con)
+        admin = self.require_admin(con)
         data = self.json_body()
         name, games, unlocked = data.get("username"), data.get("games"), data.get("unlocked")
         need(isinstance(name, str) and isinstance(games, list) and games
@@ -1199,6 +1273,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             else:
                 con.execute("DELETE FROM unlocks WHERE user_id = ? AND game = ?",
                             (user["id"], game))
+        what = game_title(games[0]) if len(games) == 1 else "%d games" % len(games)
+        log_admin(con, admin, "%s %s for %s" % ("Unlocked" if unlocked else "Locked", what,
+                                                admin_name(user)))
         return 200, {"name": user["username"], "adminName": admin_name(user),
                      "games": games, "unlocked": unlocked}
 
@@ -1212,7 +1289,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                  for r in rows]}
 
     def api_admin_add_invite(self, con):
-        self.require_admin(con)
+        admin = self.require_admin(con)
         data = self.json_body()
         proper = clean_proper_name(data.get("properName"))
         problem = proper_name_problem(proper)
@@ -1222,6 +1299,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         problem = username_problem(con, name)
         need(problem is None, 400, problem)
         user_id, code = create_invite(con, name, proper)
+        log_admin(con, admin, "Made an invite for %s (username %s)" % (proper, name))
         return 201, {"id": user_id, "username": name, "adminName": proper,
                      "code": show_code(code)}
 
@@ -1232,15 +1310,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return row
 
     def api_admin_new_code(self, con, user_id):
-        self.require_admin(con)
+        admin = self.require_admin(con)
         row = self.pending_invite(con, user_id)
+        log_admin(con, admin, "Gave %s a new invite code" % admin_name(row))
         code = new_invite_code(con)
         con.execute("UPDATE users SET invite_code = ? WHERE id = ?", (code, row["id"]))
         return 200, {"id": row["id"], "adminName": admin_name(row), "code": show_code(code)}
 
     def api_admin_delete_invite(self, con, user_id):
-        self.require_admin(con)
+        admin = self.require_admin(con)
         row = self.pending_invite(con, user_id)
+        log_admin(con, admin, "Deleted the invite for %s" % admin_name(row))
         con.execute("DELETE FROM users WHERE id = ?", (row["id"],))
         return 200, {"deleted": row["id"]}
 
@@ -1542,8 +1622,9 @@ def cmd_timeout(args):
     user = find_user(con, args.username)
     if user["is_admin"]:
         sys.exit("Admins can't be timed out.")
-    if not 0 <= args.minutes <= MAX_TIMEOUT_MINUTES:
-        sys.exit("Timeouts are 0 to %d minutes (a week)." % MAX_TIMEOUT_MINUTES)
+    if not (0 <= args.minutes <= MAX_TIMEOUT_MINUTES or args.minutes == INDEFINITE):
+        sys.exit("Timeouts are 0 to %d minutes (a week), or \"indefinitely\"."
+                 % MAX_TIMEOUT_MINUTES)
     until = set_timeout(con, user["id"], args.minutes)
     con.commit()
     if until:
@@ -1647,7 +1728,8 @@ def main():
                    ).add_argument("id", type=int)
     to = sub.add_parser("timeout", help="keep a user off the site for a while")
     to.add_argument("username")
-    to.add_argument("minutes", type=int, help="how long; 0 ends a timeout")
+    to.add_argument("minutes", type=lambda v: INDEFINITE if v.lower() in ("indefinitely", "forever")
+                    else int(v), help='how long; 0 ends a timeout; "indefinitely" until you end it')
     sub.add_parser("end-timeout", help="let a timed-out user back in").add_argument("username")
     ru = sub.add_parser("reset-unlocks", help="hide games behind the ? again for a user")
     ru.add_argument("username")

@@ -17,9 +17,10 @@
 <!-- Admin tools. Anyone logged in can load this page, but every request it
      makes is refused by the server unless the account is an admin.
      Sidebar on the left picks which tool shows on the right (#reports,
-     #timeouts, #unlocks, #games in the address, so a refresh stays put).
-     Invites and hidden-games access aren't on this page for now; the server
-     still has both (see `python3 server/app.py --help`). -->
+     #timeouts, #games, #log in the address, so a refresh stays put).
+     Invites, hidden-games access, grade levels and per-student unlocks aren't
+     on this page for now; the server and command line still have them all
+     (see `python3 server/app.py --help`). -->
 <div class="wrap wide">
   <h1 class="sr-only">Admin tools</h1>
   <div id="tools" class="admin-layout" hidden>
@@ -28,9 +29,10 @@
       <a class="side-item" href="#reports" data-panel="reports">Reported comments
         <span id="report-count" class="side-count" hidden></span></a>
       <a class="side-item" href="#timeouts" data-panel="timeouts">Timeout a student</a>
-      <a class="side-item" href="#unlocks" data-panel="unlocks">Locked/unlocked games</a>
       <h2 class="side-group">Games</h2>
       <a class="side-item" href="#games" data-panel="games">Game settings</a>
+      <h2 class="side-group">Logs</h2>
+      <a class="side-item" href="#log" data-panel="log">Admin log</a>
     </nav>
 
     <main class="admin">
@@ -61,35 +63,6 @@
         <ul id="timeouts" class="comments"></ul>
       </section>
 
-      <section id="panel-unlocks" class="admin-panel" hidden>
-        <h2>Locked/unlocked games</h2>
-        <p class="muted">Every game starts locked behind a "?" until the student
-          presses Play on it. Tick a game to unlock it for them, untick to lock it again.
-          Mature games don't unlock: they open by grade level.</p>
-        <form id="unlock-form" class="timeout-form" onsubmit="return false">
-          <label for="ul-user">Student</label>
-          <select id="ul-user"></select>
-        </form>
-        <div id="unlock-tools" hidden>
-          <form class="timeout-form" onsubmit="return false">
-            <label for="ul-grade">Grade level</label>
-            <select id="ul-grade">
-              <option value="1">1</option><option value="2">2</option><option value="3">3</option>
-              <option value="4">4</option><option value="5">5</option>
-            </select>
-          </form>
-          <p class="unlock-summary"><span id="ul-count"></span> ·
-            <button type="button" class="link" id="ul-all">Unlock all</button> ·
-            <button type="button" class="link" id="ul-none">Lock all</button></p>
-          <ul id="ul-games" class="unlock-list"></ul>
-          <div id="ul-mature-box" hidden>
-            <h3>Mature games</h3>
-            <p class="muted">Open at the grade shown and above; hidden below it.</p>
-            <ul id="ul-mature" class="unlock-list mature-list"></ul>
-          </div>
-        </div>
-      </section>
-
       <section id="panel-games" class="admin-panel" hidden>
         <h2>Game settings</h2>
         <p class="muted">Maturity: below that grade, standard students can't see or
@@ -103,10 +76,27 @@
         </form>
         <ul id="gs-list" class="game-settings"></ul>
       </section>
+
+      <section id="panel-log" class="admin-panel" hidden>
+        <h2>Admin log</h2>
+        <p class="muted">Everything admins have done on this page, newest first.</p>
+        <ul id="admin-log" class="comments admin-log"></ul>
+      </section>
     </main>
   </div>
   <p id="loading" class="muted" role="status">Loading…</p>
 </div>
+
+<dialog id="confirm-disable">
+  <form method="dialog">
+    <p>Are you sure you want to disable this game?
+      Disabling a game disables it for <strong>all students.</strong></p>
+    <div class="controls">
+      <button value="yes">Disable game</button>
+      <button value="no" class="quiet" autofocus>Cancel</button>
+    </div>
+  </form>
+</dialog>
 
 <script src="games.js"></script>
 <!-- Hidden games: only loads for admins and accounts allowed to see them. -->
@@ -128,6 +118,7 @@
 
   var titles = {};
   (window.GAMES || []).forEach(function (g) { titles[g.id] = g.title; });
+  function title(id) { return titles[id] || id; }
 
   function api(method, path, body) {
     var opts = { method: method, credentials: "same-origin", headers: {} };
@@ -160,6 +151,7 @@
   }
 
   function lengthLabel(minutes) {
+    if (minutes === -1) return "Indefinitely";
     if (minutes % 10080 === 0) return plural(minutes / 10080, "week");
     if (minutes % 1440 === 0) return plural(minutes / 1440, "day");
     if (minutes % 60 === 0) return plural(minutes / 60, "hour");
@@ -197,7 +189,7 @@
 
   // ---- sidebar: one panel at a time, chosen by the address's #name
 
-  var PANELS = ["reports", "timeouts", "unlocks", "games"];
+  var PANELS = ["reports", "timeouts", "games", "log"];
   function showPanel() {
     var name = location.hash.slice(1);
     if (PANELS.indexOf(name) === -1) name = "reports";
@@ -260,6 +252,7 @@
             twoStep(b, "Really delete?", function () {
               api("DELETE", "/api/comments/" + c.id).then(function () {
                 say("Comment deleted.");
+                loadLog();
                 return loadReports();
               }).catch(fail);
             });
@@ -268,6 +261,7 @@
             twoStep(b, "Keep the comment?", function () {
               api("POST", "/api/admin/comments/" + c.id + "/clear-reports").then(function () {
                 say("Reports dismissed. The comment stays up.");
+                loadLog();
                 return loadReports();
               }).catch(fail);
             });
@@ -311,7 +305,6 @@
         data.choices.forEach(function (m) { lengthSel.append(new Option(lengthLabel(m), m)); });
       }
 
-      fillStudents(ulUser, data.users);
 
       timeoutsEl.replaceChildren();
       var out = data.users.filter(function (u) { return u.timeoutUntil; });
@@ -340,6 +333,7 @@
 
   function setTimeoutFor(name, minutes) {
     return api("POST", "/api/admin/timeout", { username: name, minutes: minutes }).then(function (r) {
+      loadLog();
       say(r.until ? r.adminName + " is timed out until " + r.until + "."
                   : r.adminName + " can use the site again.");
       return Promise.all([loadUsers(), loadReports()]);
@@ -354,119 +348,6 @@
     setTimeoutFor(userSel.value, Number(lengthSel.value)).then(function () {
       button.disabled = false;
       userSel.value = "";
-    });
-  });
-
-  // ---- locked/unlocked games for one student
-
-  var ulUser = document.getElementById("ul-user");
-  var ulTools = document.getElementById("unlock-tools");
-  var ulList = document.getElementById("ul-games");
-  var ulCount = document.getElementById("ul-count");
-  var ulGrade = document.getElementById("ul-grade");
-  var ulMature = document.getElementById("ul-mature");
-  var ulState = null; // { name, games: [ids], unlocked: {id: true} }
-
-  function fillStudents(select, users) {
-    var keep = select.value;
-    select.replaceChildren(new Option("Pick a student", ""));
-    users.forEach(function (u) {
-      if (!u.admin) select.append(new Option(shown(u), u.name));
-    });
-    select.value = keep;
-  }
-
-  function title(id) { return titles[id] || id; }
-
-  function renderMature() {
-    ulMature.replaceChildren();
-    document.getElementById("ul-mature-box").hidden = !ulState.mature.length;
-    ulState.mature.slice().sort(function (a, b) {
-      return title(a.id).localeCompare(title(b.id));
-    }).forEach(function (m) {
-      var li = document.createElement("li");
-      li.className = m.allowed ? "allowed" : "blocked";
-      li.textContent = (m.allowed ? "✓ " : "✕ ") + title(m.id) + " · grade " + m.level + "+";
-      ulMature.append(li);
-    });
-  }
-
-  function renderUnlocks() {
-    var open = ulState.games.filter(function (id) { return ulState.unlocked[id]; }).length;
-    ulCount.textContent = open + " of " + ulState.games.length + " unlocked";
-    ulList.replaceChildren();
-    ulState.games.slice().sort(function (a, b) {
-      return title(a).localeCompare(title(b));
-    }).forEach(function (id) {
-      var li = document.createElement("li");
-      var label = document.createElement("label");
-      var box = document.createElement("input");
-      box.type = "checkbox";
-      box.checked = !!ulState.unlocked[id];
-      box.addEventListener("change", function () {
-        setUnlocks([id], box.checked).catch(function () { box.checked = !box.checked; });
-      });
-      label.append(box, " " + title(id));
-      li.append(label);
-      ulList.append(li);
-    });
-  }
-
-  function loadUnlocks() {
-    var name = ulUser.value;
-    if (!name) { ulTools.hidden = true; ulState = null; return Promise.resolve(); }
-    return api("GET", "/api/admin/unlocks/" + encodeURIComponent(name)).then(function (r) {
-      if (ulUser.value !== name) return; // picked someone else meanwhile
-      ulState = { name: r.name, adminName: r.adminName, games: r.games, unlocked: {},
-                  grade: r.grade, mature: r.mature };
-      r.unlocked.forEach(function (id) { ulState.unlocked[id] = true; });
-      ulGrade.value = String(r.grade);
-      renderUnlocks();
-      renderMature();
-      ulTools.hidden = false;
-    }).catch(fail);
-  }
-
-  function setUnlocks(games, unlocked) {
-    var state = ulState;
-    return api("POST", "/api/admin/unlocks",
-               { username: state.name, games: games, unlocked: unlocked }).then(function () {
-      games.forEach(function (id) {
-        if (unlocked) state.unlocked[id] = true; else delete state.unlocked[id];
-      });
-      if (state === ulState) renderUnlocks();
-      say(games.length === 1
-        ? title(games[0]) + (unlocked ? " unlocked" : " locked") + " for " + state.adminName + "."
-        : "All games " + (unlocked ? "unlocked" : "locked") + " for " + state.adminName + ".");
-    }).catch(function (err) { fail(err); throw err; });
-  }
-
-  ulUser.addEventListener("change", loadUnlocks);
-  ulGrade.addEventListener("change", function () {
-    var state = ulState, grade = Number(ulGrade.value);
-    ulGrade.disabled = true;
-    api("POST", "/api/admin/grade", { username: state.name, grade: grade }).then(function (r) {
-      say(r.adminName + " is now in grade " + r.grade + ".");
-      state.grade = r.grade;
-      state.mature.forEach(function (m) { m.allowed = r.grade >= m.level; });
-      if (state === ulState) renderMature();
-    }).catch(function (err) { ulGrade.value = String(state.grade); fail(err); })
-      .then(function () { ulGrade.disabled = false; });
-  });
-  document.getElementById("ul-all").addEventListener("click", function (e) {
-    var b = e.currentTarget;
-    twoStep(b, "Unlock every game?", function () {
-      setUnlocks(ulState.games, true).catch(function () {}).then(function () {
-        b.disabled = false; delete b.dataset.armed; b.textContent = "Unlock all";
-      });
-    });
-  });
-  document.getElementById("ul-none").addEventListener("click", function (e) {
-    var b = e.currentTarget;
-    twoStep(b, "Lock every game?", function () {
-      setUnlocks(ulState.games, false).catch(function () {}).then(function () {
-        b.disabled = false; delete b.dataset.armed; b.textContent = "Lock all";
-      });
     });
   });
 
@@ -504,6 +385,7 @@
         .then(function (r) {
           g.mature = r.mature;
           say(title(g.id) + ": " + (r.mature ? "grade " + r.mature + " and up." : "not mature."));
+          loadLog();
         })
         .catch(function (err) { sel.value = String(before); fail(err); })
         .then(function () { sel.disabled = false; });
@@ -515,21 +397,43 @@
     function label() { toggle.textContent = g.disabled ? "Enable game" : "Disable game"; }
     label();
     toggle.addEventListener("click", function () {
+      if (g.disabled) setDisabled(false); // enabling needs no warning
+      else confirmDisable(function () { setDisabled(true); });
+    });
+    function setDisabled(value) {
       toggle.disabled = true;
-      api("POST", "/api/admin/games/" + encodeURIComponent(g.id), { disabled: !g.disabled })
+      api("POST", "/api/admin/games/" + encodeURIComponent(g.id), { disabled: value })
         .then(function (r) {
           g.disabled = r.disabled;
           li.classList.toggle("disabled", g.disabled);
           label();
           say(title(g.id) + (g.disabled ? " is disabled for students." : " is back on for students."));
+          loadLog();
         })
         .catch(fail)
         .then(function () { toggle.disabled = false; });
-    });
+    }
 
     li.append(name, sel, toggle);
     return li;
   }
+
+  // "Are you sure?" before disabling. Cancel, Esc or clicking outside: nothing.
+  var disableBox = document.getElementById("confirm-disable");
+  var onDisableYes = null;
+  function confirmDisable(yes) {
+    onDisableYes = yes;
+    disableBox.returnValue = "";
+    disableBox.showModal();
+  }
+  disableBox.addEventListener("close", function () {
+    var yes = onDisableYes;
+    onDisableYes = null;
+    if (disableBox.returnValue === "yes" && yes) yes();
+  });
+  disableBox.addEventListener("click", function (e) {
+    if (e.target === disableBox) disableBox.close(); // clicked the dimmed backdrop
+  });
 
   function filterGames() {
     var q = gsSearch.value.trim().toLowerCase();
@@ -553,6 +457,33 @@
     });
   }
 
+  // ---- admin log
+
+  var logEl = document.getElementById("admin-log");
+
+  function loadLog() {
+    return api("GET", "/api/admin/log").then(function (data) {
+      logEl.replaceChildren();
+      if (!data.log.length) {
+        var none = document.createElement("li");
+        none.className = "empty";
+        none.textContent = "Nothing yet.";
+        logEl.append(none);
+      }
+      data.log.forEach(function (e) {
+        var li = document.createElement("li");
+        var when = document.createElement("span");
+        when.className = "meta";
+        when.textContent = new Date(e.created * 1000).toLocaleString([], {
+          month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+        var who = document.createElement("strong");
+        who.textContent = e.admin;
+        li.append(when, " · ", who, " · ", e.action); // plain text only
+        logEl.append(li);
+      });
+    }).catch(fail);
+  }
+
   // ---- start
 
   api("GET", "/api/me").then(function (data) {
@@ -560,7 +491,7 @@
       loadingEl.textContent = "Admin tools are for admin accounts only.";
       return;
     }
-    return Promise.all([loadReports(), loadUsers(), loadGames()]).then(function () {
+    return Promise.all([loadReports(), loadUsers(), loadGames(), loadLog()]).then(function () {
       loadingEl.hidden = true;
       tools.hidden = false;
       showPanel();

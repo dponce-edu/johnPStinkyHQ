@@ -571,19 +571,8 @@ button:disabled { opacity: .5; cursor: progress; }
 .admin #status:empty { display: none; }
 .admin-panel h2:first-child { margin-top: 0; }
 .admin .timeout-form { justify-content: flex-start; }
-.unlock-summary { margin: 1rem 0 .5rem; }
-.unlock-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
-  gap: .25rem 1rem;
-}
-.unlock-list label { display: flex; gap: .5rem; align-items: center; cursor: pointer; }
-.unlock-list input { width: 1.05rem; height: 1.05rem; flex-shrink: 0; accent-color: var(--accent); }
-.mature-list li.blocked { color: var(--muted); }
 .admin-sidebar .side-group { margin-top: 1rem; }
+.admin-log li { padding: .45rem .8rem; }
 .game-settings { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: .35rem; }
 .game-settings li {
   display: grid;
