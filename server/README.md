@@ -92,6 +92,7 @@ Run these with `sudo -u clubescapade python3 /srv/club-escapade/site/server/app.
 | `add-user NAME` | Makes a ready-to-use account with a random 6-digit PIN, skipping the invite. Add `--proper-name "..."`, `--choose` to type the PIN, `--admin` for an admin |
 | `list-users` | Shows every account with its proper name and screen name |
 | `make-admin NAME` / `remove-admin NAME` | Admins can delete anyone's comment |
+| `allow-hidden NAME` / `disallow-hidden NAME` | Lets them see the hidden games (also a checkbox on the admin page). Admins always can |
 | `timeout NAME MINUTES` / `end-timeout NAME` | Logs them out and keeps them off the site for that long (up to 10080, a week) |
 | `ban NAME` / `unban NAME` | Banning logs them out and hides their comments and ratings |
 | `list-comments` | Shows the 20 newest comments with their IDs and report counts. Add `--reported`, `--game ID`, `--user NAME` or `-n 50` to narrow or widen it |
@@ -149,7 +150,15 @@ rsync -av --delete --rsync-path="sudo rsync" games/ pi@your-pi:/srv/club-escapad
 ```
 `--delete` removes games from the Pi that you've deleted locally. Don't
 rename a game file once students have played it, because their saves are tied
-to the file name.
+to the file name. This copies the hidden games too.
+
+**Hidden games** live in `games/hidden/`: their `.swf` files and their own
+list, `games/hidden/games.js` (same format as `games.js`; there's a template
+at the top of `games.js`). The server answers "not found" for anything in
+that folder unless the account is an admin or has been allowed hidden games
+(the **Hidden games** checkboxes on the admin page, or `allow-hidden NAME`).
+For those accounts, hidden games show up and work like any other game. On
+GitHub Pages there's no server, and `games/` isn't in git, so they never appear.
 
 **Back up the database** (safe while running). Add a nightly cron job with `sudo crontab -e`:
 ```

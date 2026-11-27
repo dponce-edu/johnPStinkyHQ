@@ -64,11 +64,20 @@
         <h3>Timed out now</h3>
         <ul id="timeouts" class="comments"></ul>
       </section>
+
+      <section>
+        <h2>Hidden games</h2>
+        <p class="muted">Games in the games/hidden folder. Only admins and the
+          students ticked here can see or play them.</p>
+        <ul id="hidden-access" class="comments hidden-access"></ul>
+      </section>
     </div>
   </main>
 </div>
 
 <script src="games.js"></script>
+<!-- Hidden games: only loads for admins and accounts allowed to see them. -->
+<script src="games/hidden/games.js"></script>
 <script src="saves.js"></script>
 <script src="account.js"></script>
 <script>
@@ -231,6 +240,8 @@
         data.choices.forEach(function (m) { lengthSel.append(new Option(lengthLabel(m), m)); });
       }
 
+      renderHiddenAccess(data.users);
+
       timeoutsEl.replaceChildren();
       var out = data.users.filter(function (u) { return u.timeoutUntil; });
       if (!out.length) {
@@ -253,6 +264,41 @@
         li.append(p);
         timeoutsEl.append(li);
       });
+    });
+  }
+
+  // ---- hidden games: one checkbox per student
+
+  var hiddenEl = document.getElementById("hidden-access");
+
+  function renderHiddenAccess(users) {
+    hiddenEl.replaceChildren();
+    var students = users.filter(function (u) { return !u.admin; });
+    if (!students.length) {
+      var none = document.createElement("li");
+      none.className = "empty";
+      none.textContent = "No students yet.";
+      hiddenEl.append(none);
+    }
+    students.forEach(function (u) {
+      var li = document.createElement("li");
+      var label = document.createElement("label");
+      var box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = u.hiddenGames;
+      box.addEventListener("change", function () {
+        box.disabled = true;
+        api("POST", "/api/admin/hidden-games", { username: u.name, allowed: box.checked })
+          .then(function (r) {
+            say(r.adminName + (r.hiddenGames ? " can now see the hidden games."
+                                             : " can no longer see the hidden games."));
+          })
+          .catch(function (err) { box.checked = !box.checked; fail(err); })
+          .then(function () { box.disabled = false; });
+      });
+      label.append(box, " " + shown(u));
+      li.append(label);
+      hiddenEl.append(li);
     });
   }
 

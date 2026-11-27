@@ -503,6 +503,8 @@ button:disabled { opacity: .5; cursor: progress; }
   padding: .6rem .9rem;
 }
 .comments li.empty { color: var(--muted); }
+.hidden-access label { display: flex; gap: .6rem; align-items: center; cursor: pointer; }
+.hidden-access input { width: 1.1rem; height: 1.1rem; accent-color: var(--accent); }
 .comments .meta { color: var(--muted); font-size: .9rem; }
 .comments .meta strong { color: var(--ink); }
 .comments .flagged { color: #ff6666; font-weight: 600; }

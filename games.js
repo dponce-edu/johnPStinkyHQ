@@ -13,6 +13,20 @@
 //          player sizes itself to the game once it loads.
 //
 // Don't rename or move a .swf once people have played it: saves are tied to its path.
+//
+// Hidden games go in games/hidden/ instead: the .swf files and their own list,
+// games/hidden/games.js. Only admins and accounts allowed to see hidden games
+// (admin page, or `python3 server/app.py allow-hidden NAME`) can load anything
+// in that folder; for them, hidden games work just like these. That list adds
+// to this one; start it from this template:
+//
+//   window.GAMES = (window.GAMES || []).concat([
+//     {
+//       id: "secret-game",
+//       title: "Secret Game",
+//       file: "games/hidden/secret-game.swf"
+//     }
+//   ]).sort(function (a, b) { return a.title.localeCompare(b.title); });
 
 window.GAMES = [
   {

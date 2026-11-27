@@ -11,6 +11,7 @@ to this server on 127.0.0.1:8080. See server/README.md.
     python3 server/app.py add-user NAME    # create an account, prints its PIN
     python3 server/app.py make-admin NAME  # let NAME delete any comment
     python3 server/app.py ban NAME         # block NAME and hide their posts
+    python3 server/app.py allow-hidden NAME  # let NAME see games/hidden/
     python3 server/app.py --help           # everything else
 """
 
@@ -71,7 +72,8 @@ CREATE TABLE IF NOT EXISTS users (
     timeout_until INTEGER NOT NULL DEFAULT 0, -- can't use the site until then
     screen_name TEXT,                          -- what others see; NULL: the username
     proper_name TEXT NOT NULL DEFAULT '',      -- legal/formal name; admins only
-    invite_code TEXT                           -- set until the student joins
+    invite_code TEXT,                          -- set until the student joins
+    hidden_games INTEGER NOT NULL DEFAULT 0    -- may see games/hidden/
 );
 CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY,
@@ -141,6 +143,8 @@ def init_db():
         con.execute("ALTER TABLE users ADD COLUMN invite_code TEXT")
     if "proper_name" not in columns:
         con.execute("ALTER TABLE users ADD COLUMN proper_name TEXT NOT NULL DEFAULT ''")
+    if "hidden_games" not in columns:
+        con.execute("ALTER TABLE users ADD COLUMN hidden_games INTEGER NOT NULL DEFAULT 0")
     con.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_by_invite ON users(invite_code)")
     con.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_by_screen_name "
                 "ON users(screen_name COLLATE NOCASE)")
@@ -359,24 +363,49 @@ def has_blocked_word(text):
 
 # ---------------------------------------------------------------- game list
 
-_games = {"mtime": None, "ids": frozenset()}
+# Hidden games: their .swf files and their own list (games/hidden/games.js)
+# live in this folder. Only admins and accounts with the hidden_games flag
+# can load anything in it or use those games' comments, ratings and unlocks.
+# For them, hidden games work exactly like the rest.
+HIDDEN_FOLDER = "/games/hidden"
+HIDDEN_LIST = os.path.join(ROOT, "games", "hidden", "games.js")
+
+_games = {}
 _games_lock = threading.Lock()
 
 
-def game_ids():
-    """Game ids from games.js, re-read whenever the file changes."""
-    path = os.path.join(ROOT, "games.js")
+def _ids_in(path):
+    """Game ids in a games.js-style list, re-read whenever the file changes."""
     try:
         mtime = os.path.getmtime(path)
     except OSError:
-        return _games["ids"]
+        return frozenset()
     with _games_lock:
-        if mtime != _games["mtime"]:
+        cached = _games.get(path)
+        if cached is None or cached[0] != mtime:
             with open(path, encoding="utf-8") as f:
                 ids = re.findall(r'\bid:\s*"([a-z0-9-]+)"', f.read())
-            _games["ids"] = frozenset(ids)
-            _games["mtime"] = mtime
-        return _games["ids"]
+            cached = _games[path] = (mtime, frozenset(ids))
+        return cached[1]
+
+
+def hidden_game_ids():
+    return _ids_in(HIDDEN_LIST)
+
+
+def game_ids(user=None):
+    """Every game this user may see: games.js, plus the hidden ones if allowed."""
+    ids = _ids_in(os.path.join(ROOT, "games.js"))
+    return ids | hidden_game_ids() if may_see_hidden(user) else ids
+
+
+def may_see_hidden(user):
+    return bool(user and (user["is_admin"] or user["hidden_games"]))
+
+
+def is_hidden_path(lowered):
+    """lowered: a clean_path()-ed, lower-cased URL path."""
+    return lowered == HIDDEN_FOLDER or lowered.startswith(HIDDEN_FOLDER + "/")
 
 
 # ---------------------------------------------------------------- rate limits
@@ -448,6 +477,7 @@ ROUTES = [
     ("POST", r"/api/admin/comments/(\d+)/clear-reports", "admin_clear_reports"),
     ("GET", r"/api/admin/users", "admin_users"),
     ("POST", r"/api/admin/timeout", "admin_timeout"),
+    ("POST", r"/api/admin/hidden-games", "admin_hidden_games"),
     ("GET", r"/api/admin/invites", "admin_invites"),
     ("POST", r"/api/admin/invites", "admin_add_invite"),
     ("POST", r"/api/admin/invites/(\d+)/new-code", "admin_new_code"),
@@ -546,7 +576,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 lowered == p or lowered.startswith(p + "/") for p in PRIVATE_PREFIXES):
             self.send_error(404)
             return
-        # Same rule Caddy applies in production with forward_auth.
+        # Same rules Caddy applies in production with forward_auth.
         if lowered not in PUBLIC_PATHS:
             con = connect()
             try:
@@ -559,6 +589,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.send_header("Content-Length", "0")
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
+                return
+            if is_hidden_path(lowered) and not may_see_hidden(user):
+                self.send_error(404)
                 return
         self.revalidate = True
         if method == "HEAD":
@@ -705,9 +738,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         """Caddy asks this before serving any page or file (forward_auth).
         200 lets the request through; anything else is sent back instead."""
         uri = self.headers.get("X-Forwarded-Uri", "/")
-        if clean_path(urlsplit(uri).path).lower() in PUBLIC_PATHS:
+        lowered = clean_path(urlsplit(uri).path).lower()
+        if lowered in PUBLIC_PATHS:
             return 200, {"ok": True}
-        if self.current_user(con):
+        user = self.current_user(con)
+        if user:
+            # Hidden games: a plain "not found" for everyone not allowed.
+            need(not is_hidden_path(lowered) or may_see_hidden(user), 404, "Not found.")
             return 200, {"ok": True}
         self.extra_headers.append(("Location", login_redirect(uri)))
         return 302, {"error": "Log in first."}
@@ -802,12 +839,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     # -- API: games
 
-    def check_game(self, game):
-        need(game in game_ids(), 404, "No such game.")
+    def check_game(self, game, user):
+        need(game in game_ids(user), 404, "No such game.")
 
     def api_game(self, con, game):
-        self.check_game(game)
         user = self.require_user(con, "Log in first.")
+        self.check_game(game, user)
         rows = con.execute(
             "SELECT c.id, c.body, c.created, c.user_id, u.username, u.screen_name, "
             "(SELECT COUNT(*) FROM reports r WHERE r.comment_id = c.id) AS reports, "
@@ -833,8 +870,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return 200, {"comments": comments, "rating": rating_summary(con, game, user)}
 
     def api_add_comment(self, con, game):
-        self.check_game(game)
         user = self.require_user(con, "Log in to comment.")
+        self.check_game(game, user)
         data = self.json_body()
         body = data.get("body")
         need(isinstance(body, str), 400, "Write a comment first.")
@@ -858,8 +895,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                  "body": body, "created": now, "canDelete": True}}
 
     def api_rate(self, con, game):
-        self.check_game(game)
         user = self.require_user(con, "Log in to rate games.")
+        self.check_game(game, user)
         data = self.json_body()
         stars = data.get("stars")
         need(type(stars) is int and 1 <= stars <= 5, 400, "Ratings are 1 to 5 stars.")
@@ -926,6 +963,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "name": u["username"], "screenName": u["screen_name"],
             "properName": u["proper_name"], "adminName": admin_name(u),
             "admin": bool(u["is_admin"]), "banned": bool(u["banned"]),
+            "hiddenGames": bool(u["hidden_games"]),
             "timeoutUntil": u["timeout_until"] if u["timeout_until"] > now else None,
             "until": until_text(u["timeout_until"]) if u["timeout_until"] > now else None,
         } for u in con.execute("SELECT * FROM users WHERE invite_code IS NULL ORDER BY "
@@ -947,6 +985,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return 200, {"name": user["username"], "adminName": admin_name(user),
                      "timeoutUntil": until or None,
                      "until": until_text(until) if until else None}
+
+    def api_admin_hidden_games(self, con):
+        """Body: {"username": NAME, "allowed": true/false}."""
+        self.require_admin(con)
+        data = self.json_body()
+        name, allowed = data.get("username"), data.get("allowed")
+        need(isinstance(name, str) and isinstance(allowed, bool), 400,
+             "Pick a student and yes or no.")
+        user = con.execute("SELECT * FROM users WHERE username = ?", (name,)).fetchone()
+        need(user is not None and user["invite_code"] is None, 404,
+             "No student called %s." % name)
+        con.execute("UPDATE users SET hidden_games = ? WHERE id = ?", (int(allowed), user["id"]))
+        return 200, {"name": user["username"], "adminName": admin_name(user),
+                     "hiddenGames": allowed}
 
     def api_admin_invites(self, con):
         self.require_admin(con)
@@ -1002,8 +1054,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                      "unlocked": [r["game"] for r in rows]}
 
     def api_unlock(self, con, game):
-        self.check_game(game)
         user = self.require_user(con, "Log in first.")
+        self.check_game(game, user)
         cur = con.execute("INSERT OR IGNORE INTO unlocks (user_id, game, created) VALUES (?, ?, ?)",
                           (user["id"], game, int(time.time())))
         return 200, {"game": game, "new": cur.rowcount == 1}
@@ -1041,12 +1093,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return 200, {"saved": len(put), "deleted": len(delete)}
 
     def api_all_ratings(self, con):
-        self.require_user(con, "Log in first.")
+        user = self.require_user(con, "Log in first.")
         rows = con.execute(
             "SELECT r.game, AVG(r.stars) AS avg, COUNT(*) AS count "
             "FROM ratings r JOIN users u ON u.id = r.user_id "
             "WHERE u.banned = 0 GROUP BY r.game").fetchall()
-        known = game_ids()
+        known = game_ids(user)
         return 200, {"ratings": {r["game"]: {"avg": round(r["avg"], 2), "count": r["count"]}
                                  for r in rows if r["game"] in known}}
 
@@ -1304,7 +1356,8 @@ def cmd_list_users(args):
     init_db()
     con = connect()
     for u in con.execute("SELECT * FROM users WHERE invite_code IS NULL ORDER BY id"):
-        flags = [f for f, on in (("admin", u["is_admin"]), ("banned", u["banned"])) if on]
+        flags = [f for f, on in (("admin", u["is_admin"]), ("banned", u["banned"]),
+                                 ("hidden-games", u["hidden_games"])) if on]
         if u["screen_name"]:
             flags.insert(0, "shows as %s" % u["screen_name"])
         if u["proper_name"]:
@@ -1330,7 +1383,9 @@ def main():
     for name, text in (("make-admin", "let a user delete any comment"),
                        ("remove-admin", "take admin away"),
                        ("ban", "block a user and hide their comments and ratings"),
-                       ("unban", "lift a ban")):
+                       ("unban", "lift a ban"),
+                       ("allow-hidden", "let a user see the hidden games (games/hidden/)"),
+                       ("disallow-hidden", "take hidden games away")):
         sub.add_parser(name, help=text).add_argument("username")
     sub.add_parser("delete-comment", help="delete one comment by id").add_argument("id", type=int)
     au = sub.add_parser("add-user", help="create an account (prints a random PIN)")
@@ -1384,6 +1439,10 @@ def main():
         cmd_set_flag(args, "banned", 1, "%s is banned and logged out.")
     elif args.command == "unban":
         cmd_set_flag(args, "banned", 0, "%s is unbanned.")
+    elif args.command == "allow-hidden":
+        cmd_set_flag(args, "hidden_games", 1, "%s can now see the hidden games.")
+    elif args.command == "disallow-hidden":
+        cmd_set_flag(args, "hidden_games", 0, "%s can no longer see the hidden games.")
     elif args.command == "invite":
         cmd_invite(args)
     elif args.command == "list-invites":
