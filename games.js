@@ -17,12 +17,6 @@
 
 window.GAMES = [
   {
-    id: "acid-factory",
-    title: "Acid Factory",
-    file: "games/acidfactory.swf",
-    blurb: "Don't fall in!"
-  },
-  {
     id: "amberial",
     title: "Amberial",
     file: "games/amberial.swf",
@@ -41,6 +35,18 @@ window.GAMES = [
     blurb: "Climb the falling blocks before you're crushed."
   },
   {
+    id: "awesome-tanks",
+    title: "Awesome Tanks",
+    file: "games/587840_awesomeTanks.swf",
+    blurb: "Blast enemy tanks and upgrade your own."
+  },
+  {
+    id: "bloxorz",
+    title: "Bloxorz",
+    file: "games/bloxorz.swf",
+    blurb: "Roll the block into the square hole."
+  },
+  {
     id: "cheese-dreams",
     title: "Cheese Dreams",
     file: "games/Cheese_Dreams.swf",
@@ -57,6 +63,18 @@ window.GAMES = [
     title: "Cover Orange 2",
     file: "games/coverorange2.swf",
     blurb: "Shield the oranges from the toxic cloud, again!"
+  },
+  {
+    id: "devilish-cooking",
+    title: "Devilish Cooking",
+    file: "games/devilish_cooking.swf",
+    blurb: "Cook up some mischief."
+  },
+  {
+    id: "devilish-hairdresser",
+    title: "Devilish Hairdresser",
+    file: "games/devilish-hairdresser.swf",
+    blurb: "Give your customers the haircut they deserve."
   },
   {
     id: "dragon-maker",
@@ -95,6 +113,12 @@ window.GAMES = [
     blurb: "Launch a penguin, buy upgrades, learn! To! Fly!"
   },
   {
+    id: "learn-to-fly-2",
+    title: "Learn to Fly 2",
+    file: "games/Learn to Fly 2 (cracked).swf",
+    blurb: "The penguin is back, and still determined to fly."
+  },
+  {
     id: "my-new-room",
     title: "My New Room",
     file: "games/my_new_room_girlsgogames_com_v1_01.swf",
@@ -111,6 +135,18 @@ window.GAMES = [
     title: "The Powerpuff Girls: Attack of the Puppybots",
     file: "games/the_powerpuff_girls___attack_of_the_puppybots_by_oldadobeflashgames01_de16186.swf",
     blurb: "Beat this bullet-mania as Bubbles, Blossom, and Buttercup."
+  },
+  {
+    id: "raft-wars",
+    title: "Raft Wars",
+    file: "games/raftwars.swf",
+    blurb: "Defend your treasure from raft-riding raiders."
+  },
+  {
+    id: "raft-wars-2",
+    title: "Raft Wars 2",
+    file: "games/raft-wars-2.swf",
+    blurb: "More rafts, more water balloons, more war."
   },
   {
     id: "red-ball",
@@ -147,6 +183,12 @@ window.GAMES = [
     title: "Skywire",
     file: "games/Skywire.swf",
     blurb: "Get the cable car safely to the end of the line."
+  },
+  {
+    id: "super-mario-63",
+    title: "Super Mario 63",
+    file: "games/498969_Super_Mario_63__2009_.swf",
+    blurb: "Fan-made Mario adventure collecting Shine Sprites and Star Coins."
   },
   {
     id: "toxic-2",
