@@ -107,37 +107,15 @@
       el.form.hidden = false;
       return;
     }
+    // Logged out while on this page (e.g. the session ran out): send them to
+    // the PIN log-in page, which brings them back here afterwards.
     el.form.hidden = true;
-    var form = document.createElement("form");
-    form.className = "auth";
-    form.innerHTML =
-      '<label class="sr-only" for="auth-name">Username</label>' +
-      '<input id="auth-name" type="text" autocomplete="username" placeholder="username" ' +
-      'minlength="3" maxlength="20" pattern="[A-Za-z0-9_\\-]{3,20}" required>' +
-      '<label class="sr-only" for="auth-pass">Password</label>' +
-      '<input id="auth-pass" type="password" autocomplete="current-password" placeholder="password" ' +
-      'minlength="8" maxlength="200" required>' +
-      '<button type="submit">Log in</button>' +
-      '<p class="muted auth-note">No account? Ask your teacher for one.</p>';
-    form.addEventListener("submit", function (e) {
-      e.preventDefault();
-      var creds = {
-        username: form.querySelector("#auth-name").value.trim(),
-        password: form.querySelector("#auth-pass").value
-      };
-      var buttons = form.querySelectorAll("button");
-      buttons.forEach(function (b) { b.disabled = true; });
-      say("Logging in…");
-      api("POST", "/api/login", creds).then(function (data) {
-        say("");
-        setUser(data.user);
-        return refresh();
-      }).catch(function (err) {
-        fail(err);
-        buttons.forEach(function (b) { b.disabled = false; });
-      });
-    });
-    el.account.append(form);
+    var p = document.createElement("p");
+    var a = document.createElement("a");
+    a.href = "login.html?next=" + encodeURIComponent(location.pathname + location.search);
+    a.textContent = "Log in";
+    p.append(a, " to rate and comment.");
+    el.account.append(p);
   }
 
   function setUser(user) {

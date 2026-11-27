@@ -19,6 +19,10 @@ clubescapade.example.com {
 		forward_auth 127.0.0.1:8080 {
 			uri /api/auth-check
 		}
+		# Browsers must check with the server before reusing a cached page or
+		# game, so nothing is reachable from the cache after logging out.
+		# Unchanged files still aren't downloaded again (304 Not Modified).
+		header Cache-Control "no-cache"
 		# The repo checkout holds files that must never be public. "hide"
 		# checks the actual file, so odd URLs like /./server/ can't get past it.
 		file_server {

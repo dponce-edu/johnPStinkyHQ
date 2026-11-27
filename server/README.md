@@ -64,7 +64,7 @@ which git ignores.
    Visit `https://your-domain`. Caddy gets the certificate on first visit.
 
 7. Create your own admin account, so you can delete any comment. Then log in
-   on the site with the password it prints:
+   on the site with the PIN it prints:
    ```sh
    sudo -u clubescapade python3 /srv/club-escapade/site/server/app.py \
      --db /var/lib/club-escapade/club.db add-user YOURNAME --admin
@@ -84,13 +84,13 @@ Run these with `sudo -u clubescapade python3 /srv/club-escapade/site/server/app.
 
 | Command | Does |
 |---|---|
-| `add-user NAME` | Creates an account and prints a random password to give the student. Add `--choose` to type one yourself, `--admin` for an admin |
+| `add-user NAME` | Creates an account and prints a random 6-digit PIN to give the student. Add `--choose` to type one yourself, `--admin` for an admin |
 | `list-users` | Shows every account |
 | `make-admin NAME` / `remove-admin NAME` | Admins can delete anyone's comment |
 | `ban NAME` / `unban NAME` | Banning logs them out and hides their comments and ratings |
 | `list-comments` | Shows the 20 newest comments with their IDs and report counts. Add `--reported`, `--game ID`, `--user NAME` or `-n 50` to narrow or widen it |
 | `delete-comment ID` | Deletes one comment |
-| `reset-password NAME` | Gives them a new random password (like `k7mp-3xqa-9wdh`) and logs them out everywhere. Add `--choose` to type one yourself |
+| `reset-pin NAME` | Gives them a new random PIN and logs them out everywhere. Add `--choose` to type one yourself |
 | `clear-reports ID` | Keeps a reported comment and drops its reports |
 | `clear-saves NAME` | Deletes all of someone's game saves. Add `--game ID` for just one game |
 
@@ -135,11 +135,17 @@ Clean up older comments with
 | What | Limit |
 |---|---|
 | Usernames | 3–20 letters, numbers, `-` or `_`, case-insensitive |
-| Passwords | 8–200 characters, stored as scrypt hashes |
+| PINs | Exactly 6 digits, stored as scrypt hashes. To change the length, edit `PIN_LENGTH` in both `server/app.py` and `login.html` |
 | Sessions | 30 days, in an HttpOnly cookie |
-| Failed log-ins | 10 per 15 minutes per IP address |
+| Wrong PINs | 5 per 15 minutes per username, then that name is locked for the rest of the 15 minutes. 100 per 15 minutes per IP address, set high because a school usually shares one |
 | Comments | 1,000 characters; 5 a minute and 50 a day per user |
 | Rating changes | 30 a minute per user |
 | Game saves | 512 KB per save, 10 MB per user in all |
 
-Rate limits are kept in memory and reset when the server restarts.
+Rate limits are kept in memory and reset when the server restarts. Restarting
+also unlocks a student who's locked out by wrong PINs.
+
+A 6-digit PIN is only safe because guesses are slow: at 5 tries per 15
+minutes, guessing one would take years. Anyone can lock a
+classmate's name for 15 minutes by guessing wrong 5 times. If that becomes a
+problem, restart the server, and ban whoever is doing it.

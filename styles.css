@@ -238,15 +238,49 @@ input:focus-visible, textarea:focus-visible {
 }
 ::placeholder { color: var(--muted); opacity: 1; }
 
-.auth {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .5rem;
-  justify-content: center;
-}
-.auth input { flex: 1 1 10rem; min-width: 0; }
-.auth .auth-note { flex-basis: 100%; margin: 0; }
+.auth-note { margin: .5rem 0 0; }
 .login { max-width: 420px; margin: 0 auto; }
+
+/* ---------- PIN log-in (login.html) ---------- */
+.pin-login {
+  display: grid;
+  gap: .5rem;
+  max-width: 18rem;
+  margin: 0 auto;
+}
+.pin-login label { font-weight: 600; text-align: left; }
+.pin-login input { width: 100%; }
+.pin-login label[for="pin"] { margin-top: .5rem; }
+.pin-input {
+  font-size: 2rem;
+  letter-spacing: .4em;
+  text-align: center;
+  padding-left: .8em; /* balance the letter-spacing after the last dot */
+}
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: .5rem;
+  margin-top: .5rem;
+}
+.keypad button {
+  font-size: 1.6rem;
+  padding: .7rem 0;
+  touch-action: manipulation; /* no double-tap zoom on fast taps */
+  transition: transform .06s ease;
+}
+.keypad button[data-key="clear"] { font-size: 1rem; }
+.keypad button:active, .keypad button.pressed { transform: scale(.92); filter: brightness(.8); }
+.keypad button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.pin-login.busy .keypad { opacity: .5; }
+.pin-login.shake { animation: shake .35s; }
+@keyframes shake {
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pin-login.shake { animation: none; }
+}
 .account-bar { margin: .5rem 0 0; }
 
 .comment-form textarea { width: 100%; resize: vertical; display: block; }

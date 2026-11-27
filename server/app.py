@@ -8,7 +8,7 @@ In production Caddy serves the site's files and HTTPS, and passes /api/*
 to this server on 127.0.0.1:8080. See server/README.md.
 
     python3 server/app.py serve --dev      # local testing: site + API on :8080
-    python3 server/app.py add-user NAME    # create an account, prints its password
+    python3 server/app.py add-user NAME    # create an account, prints its PIN
     python3 server/app.py make-admin NAME  # let NAME delete any comment
     python3 server/app.py ban NAME         # block NAME and hide their posts
     python3 server/app.py --help           # everything else
@@ -45,6 +45,13 @@ MAX_SAVE_KEY = 300                      # one save's name
 MAX_SAVE_VALUE = 512 * 1024             # one save
 MAX_SAVES_TOTAL = 10 * 1024 * 1024      # everything one user has saved
 USERNAME_RE = re.compile(r"[A-Za-z0-9_-]{3,20}")
+PIN_LENGTH = 6  # log-ins use a 6-digit PIN; keep in step with PIN_LENGTH in login.html
+PIN_RE = re.compile(r"[0-9]{%d}" % PIN_LENGTH)
+# Wrong-PIN limits, per 15 minutes. A short PIN is only safe because guesses
+# are slow: 5 per account means years to try all 6-digit PINs. The per-address
+# limit is high because a whole school usually shares one public IP.
+PIN_FAILS_PER_USER = 5
+PIN_FAILS_PER_IP = 100
 GAME_ID = r"([a-z0-9-]{1,64})"
 
 # scrypt cost. n=2**14 takes roughly half a second per login on a Pi 2 and
@@ -401,10 +408,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
                 return
+        self.revalidate = True
         if method == "HEAD":
             super().do_HEAD()
         else:
             super().do_GET()
+
+    def end_headers(self):
+        # Site files: the browser must ask again before reusing a cached copy,
+        # so pages and games aren't reachable from the cache after logging out.
+        # (Caddy does the same in production; see server/Caddyfile.)
+        if getattr(self, "revalidate", False):
+            self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
 
     def route(self, method, path):
         lookup = "GET" if method == "HEAD" else method
@@ -540,17 +556,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def api_login(self, con):
         data = self.json_body()
         name = data.get("username")
-        password = data.get("password")
-        need(isinstance(name, str) and isinstance(password, str) and len(password) <= 200,
-             400, "Enter a username and password.")
-        fail_key = "loginfail:" + self.client_ip()
-        need(LIMITS.allowed(fail_key, 10, 900), 429,
-             "Too many failed log-ins. Wait 15 minutes and try again.")
-        user = con.execute("SELECT * FROM users WHERE username = ?", (name,)).fetchone()
-        ok = check_password(password, user["password"] if user else DUMMY_HASH)
+        pin = data.get("pin")
+        need(isinstance(name, str) and name.strip(), 400, "Enter your username.")
+        need(isinstance(pin, str) and PIN_RE.fullmatch(pin), 400, "Enter your %d-digit PIN." % PIN_LENGTH)
+        ip_key = "loginfail:" + self.client_ip()
+        user_key = "loginfail-user:" + name.strip().lower()
+        need(LIMITS.allowed(ip_key, PIN_FAILS_PER_IP, 900), 429,
+             "Too many wrong PINs from here. Wait 15 minutes and try again.")
+        need(LIMITS.allowed(user_key, PIN_FAILS_PER_USER, 900), 429,
+             "Too many wrong PINs for this name. Wait 15 minutes, or ask your teacher.")
+        user = con.execute("SELECT * FROM users WHERE username = ?", (name.strip(),)).fetchone()
+        ok = check_password(pin, user["password"] if user else DUMMY_HASH)
         if not (user and ok):
-            LIMITS.add(fail_key)
-            raise ApiError(401, "Wrong username or password.")
+            LIMITS.add(ip_key)
+            LIMITS.add(user_key)
+            raise ApiError(401, "Wrong username or PIN.")
         need(not user["banned"], 403, "This account has been banned.")
         self.start_session(con, user["id"])
         return 200, {"user": public_user(user)}
@@ -762,21 +782,16 @@ def cmd_set_flag(args, column, value, done):
     print(done % user["username"])
 
 
-# No 0/O, 1/l/I: easy to read off a screen and type on a Chromebook.
-TEMP_PASSWORD_CHARS = "abcdefghjkmnpqrstuvwxyz23456789"
-
-
-def pick_password(args, name):
-    """--choose: type it twice. Otherwise a random one like k7mp-3xqa-9wdh."""
+def pick_pin(args, name):
+    """--choose: type it twice. Otherwise a random one."""
     if not args.choose:
-        return "-".join("".join(secrets.choice(TEMP_PASSWORD_CHARS) for _ in range(4))
-                        for _ in range(3))
-    password = getpass.getpass("New password for %s: " % name)
-    if not 8 <= len(password) <= 200:
-        sys.exit("Passwords need 8-200 characters. Nothing changed.")
-    if getpass.getpass("Type it again: ") != password:
+        return str(secrets.randbelow(10 ** PIN_LENGTH)).zfill(PIN_LENGTH)
+    pin = getpass.getpass("New %d-digit PIN for %s: " % (PIN_LENGTH, name))
+    if not PIN_RE.fullmatch(pin):
+        sys.exit("PINs are exactly %d digits. Nothing changed." % PIN_LENGTH)
+    if getpass.getpass("Type it again: ") != pin:
         sys.exit("Those didn't match. Nothing changed.")
-    return password
+    return pin
 
 
 def cmd_add_user(args):
@@ -789,29 +804,29 @@ def cmd_add_user(args):
         sys.exit("There's already a user called %r." % name)
     if has_blocked_word(name) and not args.force:
         sys.exit("%r has a word from blocked-words.txt. Add --force to use it anyway." % name)
-    password = pick_password(args, name)
+    pin = pick_pin(args, name)
     con.execute("INSERT INTO users (username, password, created, is_admin) VALUES (?, ?, ?, ?)",
-                (name, hash_password(password), int(time.time()), 1 if args.admin else 0))
+                (name, hash_password(pin), int(time.time()), 1 if args.admin else 0))
     con.commit()
     kind = "Admin" if args.admin else "User"
     if args.choose:
         print("%s %s added." % (kind, name))
     else:
-        print("%s %s added. Password:  %s" % (kind, name, password))
+        print("%s %s added. PIN:  %s" % (kind, name, pin))
 
 
-def cmd_reset_password(args):
+def cmd_reset_pin(args):
     init_db()
     con = connect()
     user = find_user(con, args.username)
-    password = pick_password(args, user["username"])
-    con.execute("UPDATE users SET password = ? WHERE id = ?", (hash_password(password), user["id"]))
+    pin = pick_pin(args, user["username"])
+    con.execute("UPDATE users SET password = ? WHERE id = ?", (hash_password(pin), user["id"]))
     con.execute("DELETE FROM sessions WHERE user_id = ?", (user["id"],))
     con.commit()
     if args.choose:
-        print("Password for %s changed. They've been logged out everywhere." % user["username"])
+        print("PIN for %s changed. They've been logged out everywhere." % user["username"])
     else:
-        print("New password for %s:  %s" % (user["username"], password))
+        print("New PIN for %s:  %s" % (user["username"], pin))
         print("They've been logged out everywhere. Give it to them in person.")
 
 
@@ -906,19 +921,20 @@ def main():
                        ("unban", "lift a ban")):
         sub.add_parser(name, help=text).add_argument("username")
     sub.add_parser("delete-comment", help="delete one comment by id").add_argument("id", type=int)
-    au = sub.add_parser("add-user", help="create an account (prints a random password)")
+    au = sub.add_parser("add-user", help="create an account (prints a random PIN)")
     au.add_argument("username")
     au.add_argument("--choose", action="store_true",
-                    help="type the password yourself instead of getting a random one")
+                    help="type the PIN yourself instead of getting a random one")
     au.add_argument("--admin", action="store_true", help="make the account an admin")
     au.add_argument("--force", action="store_true", help="allow a name the word filter blocks")
     cs = sub.add_parser("clear-saves", help="delete a user's game saves")
     cs.add_argument("username")
     cs.add_argument("--game", help="only this game id, e.g. red-ball")
-    rp = sub.add_parser("reset-password", help="give a user a new password and log them out")
+    rp = sub.add_parser("reset-pin", aliases=["reset-password"],
+                        help="give a user a new PIN and log them out")
     rp.add_argument("username")
     rp.add_argument("--choose", action="store_true",
-                    help="type the new password yourself instead of getting a random one")
+                    help="type the new PIN yourself instead of getting a random one")
     lc = sub.add_parser("list-comments", help="show recent comments with their ids")
     lc.add_argument("--game", help="only this game id, e.g. red-ball")
     lc.add_argument("--user", help="only this username")
@@ -944,8 +960,8 @@ def main():
         cmd_add_user(args)
     elif args.command == "clear-saves":
         cmd_clear_saves(args)
-    elif args.command == "reset-password":
-        cmd_reset_password(args)
+    elif args.command in ("reset-pin", "reset-password"):
+        cmd_reset_pin(args)
     elif args.command == "delete-comment":
         cmd_delete_comment(args)
     elif args.command == "list-comments":
