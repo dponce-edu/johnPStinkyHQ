@@ -30,7 +30,7 @@ import sys
 import threading
 import time
 import unicodedata
-from urllib.parse import unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_DB = os.path.join(ROOT, "data", "club.db")
@@ -292,6 +292,7 @@ def need(ok, status, message):
 
 ROUTES = [
     ("GET", r"/api/me", "me"),
+    ("GET", r"/api/auth-check", "auth_check"),
     ("POST", r"/api/login", "login"),
     ("POST", r"/api/logout", "logout"),
     ("GET", r"/api/ratings", "all_ratings"),
@@ -304,6 +305,21 @@ ROUTES = [
 
 # Never served by --dev, even though they sit in the site folder.
 PRIVATE_PREFIXES = ("/server", "/data", "/.git", "/.gitignore")
+
+# The only files anyone can load without logging in: the log-in page and what
+# it needs. In production Caddy asks /api/auth-check about every request.
+PUBLIC_PATHS = ("/login.html", "/styles.css", "/background.jpg")
+
+
+def clean_path(path):
+    """Decode %xx and resolve ./, ../ and // the way the file lookup will."""
+    return "/" + posixpath.normpath(unquote(path)).lstrip("/")
+
+
+def login_redirect(uri):
+    """Where to send someone who isn't logged in, so they come back after."""
+    target = uri if uri.startswith("/") and not uri.startswith("//") else "/"
+    return "/login.html?next=" + quote(target, safe="")
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -352,11 +368,25 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def static(self, method, path):
         # Decode %xx and resolve ./, ../ and // before checking, the same way
         # the file lookup will, so "/./server" can't sneak past "/server".
-        lowered = "/" + posixpath.normpath(unquote(path)).lower().lstrip("/")
+        lowered = clean_path(path).lower()
         if not CONFIG["dev"] or method not in ("GET", "HEAD") or any(
                 lowered == p or lowered.startswith(p + "/") for p in PRIVATE_PREFIXES):
             self.send_error(404)
             return
+        # Same rule Caddy applies in production with forward_auth.
+        if lowered not in PUBLIC_PATHS:
+            con = connect()
+            try:
+                user = self.current_user(con)
+            finally:
+                con.close()
+            if user is None:
+                self.send_response(302)
+                self.send_header("Location", login_redirect(self.path))
+                self.send_header("Content-Length", "0")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                return
         if method == "HEAD":
             super().do_HEAD()
         else:
@@ -482,6 +512,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def api_me(self, con):
         return 200, {"user": public_user(self.current_user(con))}
 
+    def api_auth_check(self, con):
+        """Caddy asks this before serving any page or file (forward_auth).
+        200 lets the request through; anything else is sent back instead."""
+        uri = self.headers.get("X-Forwarded-Uri", "/")
+        if clean_path(urlsplit(uri).path).lower() in PUBLIC_PATHS:
+            return 200, {"ok": True}
+        if self.current_user(con):
+            return 200, {"ok": True}
+        self.extra_headers.append(("Location", login_redirect(uri)))
+        return 302, {"error": "Log in first."}
+
     def api_login(self, con):
         data = self.json_body()
         name = data.get("username")
@@ -514,7 +555,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def api_game(self, con, game):
         self.check_game(game)
-        user = self.current_user(con)
+        user = self.require_user(con, "Log in first.")
         rows = con.execute(
             "SELECT c.id, c.body, c.created, c.user_id, u.username, "
             "(SELECT COUNT(*) FROM reports r WHERE r.comment_id = c.id) AS reports, "
@@ -602,6 +643,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return 200, {"reported": int(comment_id)}
 
     def api_all_ratings(self, con):
+        self.require_user(con, "Log in first.")
         rows = con.execute(
             "SELECT r.game, AVG(r.stars) AS avg, COUNT(*) AS count "
             "FROM ratings r JOIN users u ON u.id = r.user_id "

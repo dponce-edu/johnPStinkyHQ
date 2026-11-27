@@ -12,6 +12,10 @@
   <header>
     <h1>Club Escapade</h1>
     <p>Looks like you got some free time. Check out these old things!</p>
+    <p id="account-bar" class="account-bar" hidden>
+      Logged in as <strong id="account-name"></strong> ·
+      <button id="logout" type="button" class="link">Log out</button>
+    </p>
   </header>
 
   <main>
@@ -72,6 +76,27 @@
   });
 
   if (!games.length) document.getElementById("empty").hidden = false;
+
+  // Who's logged in, from the server. Stays hidden without one (GitHub Pages).
+  fetch("/api/me", { credentials: "same-origin" })
+    .then(function (res) {
+      var type = res.headers.get("Content-Type") || "";
+      return res.ok && type.indexOf("application/json") !== -1 ? res.json() : null;
+    })
+    .then(function (data) {
+      if (!data || !data.user) return;
+      document.getElementById("account-name").textContent = data.user.name;
+      document.getElementById("account-bar").hidden = false;
+    })
+    .catch(function () {});
+  document.getElementById("logout").addEventListener("click", function () {
+    fetch("/api/logout", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: "{}"
+    }).finally(function () { location.href = "login.html"; });
+  });
 
   // Average ratings from the comments server, if it's running.
   fetch("/api/ratings", { credentials: "same-origin" })

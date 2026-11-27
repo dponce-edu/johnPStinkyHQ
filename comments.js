@@ -90,10 +90,9 @@
       out.className = "link";
       out.textContent = "Log out";
       out.addEventListener("click", function () {
+        // The whole site needs a log-in, so logging out goes to the log-in page.
         api("POST", "/api/logout").then(function () {
-          setUser(null);
-          say("Logged out.");
-          return refresh(); // drop the Delete / Report buttons that came with the session
+          location.href = "login.html";
         }).catch(fail);
       });
       p.append(out);

@@ -12,6 +12,13 @@ clubescapade.example.com {
 	}
 
 	handle {
+		# Every file needs a log-in. Caddy asks app.py first, and anyone not
+		# logged in is redirected to /login.html. The few files the log-in
+		# page itself needs are listed in PUBLIC_PATHS in server/app.py, so
+		# there's one list and one place that decides.
+		forward_auth 127.0.0.1:8080 {
+			uri /api/auth-check
+		}
 		# The repo checkout holds files that must never be public. "hide"
 		# checks the actual file, so odd URLs like /./server/ can't get past it.
 		file_server {

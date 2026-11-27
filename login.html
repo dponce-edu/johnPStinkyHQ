@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Log in · Club Escapade</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- The one page anyone can see. Everything else on the Pi needs a log-in
+     (see server/Caddyfile). Only styles.css and background.jpg load here. -->
+<div class="wrap">
+  <header>
+    <h1>Club Escapade</h1>
+    <p>Log in to play.</p>
+  </header>
+
+  <main class="login">
+    <form id="login" class="auth">
+      <label class="sr-only" for="name">Username</label>
+      <input id="name" type="text" autocomplete="username" placeholder="username"
+             minlength="3" maxlength="20" required autofocus>
+      <label class="sr-only" for="pass">Password</label>
+      <input id="pass" type="password" autocomplete="current-password" placeholder="password"
+             maxlength="200" required>
+      <button type="submit">Log in</button>
+      <p class="muted auth-note">No account? Ask your teacher for one.</p>
+    </form>
+    <p id="msg" class="muted" role="status" aria-live="polite"></p>
+  </main>
+</div>
+
+<script>
+  var form = document.getElementById("login");
+  var msg = document.getElementById("msg");
+
+  // Go back to the page that sent us here, but only to a page on this site.
+  function next() {
+    var n = new URLSearchParams(location.search).get("next") || "/";
+    return /^\/(?![\/\\])/.test(n) ? n : "/";
+  }
+
+  function json(res) {
+    var type = res.headers.get("Content-Type") || "";
+    if (type.indexOf("application/json") === -1) throw new Error("The server isn't reachable.");
+    return res.json().then(function (data) {
+      if (!res.ok) throw new Error(data.error || "Something went wrong.");
+      return data;
+    });
+  }
+
+  // Already logged in (e.g. pressed Back): skip the form.
+  fetch("/api/me", { credentials: "same-origin" }).then(json).then(function (data) {
+    if (data.user) location.replace(next());
+  }).catch(function () {});
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var button = form.querySelector("button");
+    button.disabled = true;
+    msg.textContent = "Logging in…";
+    fetch("/api/login", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: document.getElementById("name").value.trim(),
+        password: document.getElementById("pass").value
+      })
+    }).then(json).then(function () {
+      location.replace(next());
+    }).catch(function (err) {
+      msg.textContent = err.message;
+      button.disabled = false;
+      document.getElementById("pass").select();
+    });
+  });
+</script>
+</body>
+</html>

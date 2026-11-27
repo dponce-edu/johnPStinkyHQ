@@ -1,14 +1,18 @@
 # Club Escapade server
 
-Accounts, comments and 1–5 star ratings for each game. One Python file
+Log-ins, comments and 1–5 star ratings for each game. The whole site needs a
+log-in: anyone not logged in only sees `login.html`. One Python file
 (`app.py`) using only the standard library, plus a SQLite database. Built
 to run on a Raspberry Pi 2 Model B (32-bit), but it works on any Linux box.
 
 - **Caddy** serves the site's files, handles HTTPS, and passes `/api/*` to the server.
+  Before serving any file it asks the server whether the visitor is logged in
+  (`forward_auth`), and sends them to the log-in page if not.
 - **app.py** listens on `127.0.0.1:8080` and stores everything in one file,
   `/var/lib/club-escapade/club.db`.
-- Without the server, for example on GitHub Pages, the site still works.
-  Ratings and comments just don't appear.
+- Without the server, for example on GitHub Pages, there's nothing to check
+  log-ins, so **that copy of the site stays open to everyone**. Ratings and
+  comments just don't appear there.
 
 ## Try it on your computer
 
@@ -16,8 +20,9 @@ to run on a Raspberry Pi 2 Model B (32-bit), but it works on any Linux box.
 python3 server/app.py serve --dev
 ```
 
-Open <http://localhost:8080>. `--dev` also serves the site's files and lets
-log-in cookies work over plain `http`. The test database goes in `data/club.db`,
+Make yourself an account with `python3 server/app.py add-user YOURNAME`, then
+open <http://localhost:8080>. `--dev` also serves the site's files (behind the
+same log-in check) and lets log-in cookies work over plain `http`. The test database goes in `data/club.db`,
 which git ignores.
 
 ## Set up the Pi
