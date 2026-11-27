@@ -12,11 +12,6 @@
   <header>
     <h1>Club Escapade</h1>
     <p>Looks like you got some free time. Check out these old things!</p>
-    <p id="account-bar" class="account-bar" hidden>
-      Logged in as <strong id="account-name"></strong> ·
-      <button id="logout" type="button" class="link">Log out</button>
-      <span id="admin-link" hidden>· <a href="admin.html">Admin tools</a></span>
-    </p>
   </header>
 
   <main>
@@ -28,6 +23,7 @@
 
 <script src="games.js"></script>
 <script src="saves.js"></script>
+<script src="account.js"></script>
 <script>
   var grid = document.getElementById("grid");
   var games = window.GAMES || [];
@@ -150,31 +146,6 @@
       draw(set, "ce-unlocks-seen:" + data.user);
     })
     .catch(function () { draw(null); });
-
-  // Who's logged in, from the server. Stays hidden without one (GitHub Pages).
-  fetch("/api/me", { credentials: "same-origin" })
-    .then(function (res) {
-      var type = res.headers.get("Content-Type") || "";
-      return res.ok && type.indexOf("application/json") !== -1 ? res.json() : null;
-    })
-    .then(function (data) {
-      if (!data || !data.user) return;
-      document.getElementById("account-name").textContent = data.user.name;
-      document.getElementById("account-bar").hidden = false;
-      document.getElementById("admin-link").hidden = !data.user.admin;
-    })
-    .catch(function () {});
-  document.getElementById("logout").addEventListener("click", function () {
-    // Take this person's game saves off the browser (they're on the server).
-    (window.cloudSaves ? cloudSaves.logout() : Promise.resolve()).then(function () {
-      return fetch("/api/logout", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: "{}"
-      });
-    }).finally(function () { location.href = "login.html"; });
-  });
 
   // Average ratings from the comments server, if it's running. Locked cards
   // have no data-game, so they never show one.

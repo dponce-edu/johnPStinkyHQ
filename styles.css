@@ -287,7 +287,28 @@ input:focus-visible, textarea:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .pin-login.shake { animation: none; }
 }
-.account-bar { margin: .5rem 0 0; }
+/* ---------- Account box, top-right of every logged-in page (account.js) ---------- */
+.corner-account {
+  position: fixed;
+  top: .75rem;
+  right: .75rem;
+  z-index: 100;
+  max-width: calc(100vw - 1.5rem);
+  padding: .4rem .8rem;
+  background: rgba(0, 0, 0, .85);
+  border: 2px solid var(--bezel);
+  border-radius: 10px;
+  font-size: .9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.corner-account strong { color: var(--ink); }
+.corner-account a { color: var(--ink); }
+/* On narrow screens, leave room above the page title for the box. */
+@media (max-width: 760px) {
+  body.has-corner-account { padding-top: 3.5rem; }
+}
 
 .comment-form textarea { width: 100%; resize: vertical; display: block; }
 .comment-form .controls { margin-top: .5rem; justify-content: space-between; }

@@ -80,29 +80,13 @@
   function renderAccount() {
     el.account.replaceChildren();
     if (state.user) {
+      // Log out lives in the top-right corner (account.js).
       var p = document.createElement("p");
-      p.append("Logged in as ");
+      p.className = "muted";
+      p.append("Commenting as ");
       var b = document.createElement("strong");
       b.textContent = state.user.name;
-      p.append(b, " · ");
-      var out = document.createElement("button");
-      out.type = "button";
-      out.className = "link";
-      out.textContent = "Log out";
-      out.addEventListener("click", function () {
-        // The whole site needs a log-in, so logging out goes to the log-in page.
-        // Close the game first: Ruffle writes its saves as it shuts down, and
-        // they must be uploaded and wiped now, not left for the next person.
-        var game = document.querySelector("ruffle-player");
-        if (game) game.remove();
-        var saves = window.cloudSaves ? cloudSaves.logout() : Promise.resolve();
-        saves.then(function () {
-          return api("POST", "/api/logout");
-        }).then(function () {
-          location.href = "login.html";
-        }).catch(fail);
-      });
-      p.append(out);
+      p.append(b);
       el.account.append(p);
       el.form.hidden = false;
       return;
