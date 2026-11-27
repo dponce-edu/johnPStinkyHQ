@@ -77,12 +77,18 @@ a:focus-visible, button:focus-visible {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  /* 5 games per row, fewer on smaller screens. */
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 1rem;
 }
+@media (max-width: 900px) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 720px) { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Square cards: the name area fills whatever the rating line leaves. */
 .card {
-  display: block;
-  height: 100%;
+  display: flex;
+  flex-direction: column;
+  aspect-ratio: 1 / 1;
   background: var(--card);
   color: inherit;
   text-decoration: none;
@@ -93,7 +99,8 @@ a:focus-visible, button:focus-visible {
 }
 .card:hover { transform: translateY(-3px); box-shadow: inset 0 0 0 2px var(--accent); }
 .thumb {
-  aspect-ratio: 4 / 3;
+  flex: 1;
+  min-height: 0;
   background: transparent; /* let the card's green outline show around it */
   display: flex;
   align-items: center;
