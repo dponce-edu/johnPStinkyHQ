@@ -94,6 +94,14 @@ Keep the backups on a different drive than the database.
 
 **Logs:** `journalctl -u club-escapade -f`
 
+**Blocked words:** comments and new usernames containing a word from
+`server/blocked-words.txt` are turned away with a "please keep it clean"
+message. Edit the list in the repo, push, and `git pull` on the Pi. The
+server picks up the change without a restart. The notes at the top of the
+file explain the `word`, `word*`, `*word*` and `=word` forms. The filter only
+checks new comments and new usernames. Clean up older ones with
+`delete-comment` or `ban`.
+
 ## Limits built in
 
 | What | Limit |

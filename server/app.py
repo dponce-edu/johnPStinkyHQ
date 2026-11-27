@@ -27,6 +27,7 @@ import sqlite3
 import sys
 import threading
 import time
+import unicodedata
 from urllib.parse import unquote, urlsplit
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -120,6 +121,94 @@ def check_password(password, stored):
 # Checked against when a username doesn't exist, so a wrong name takes as
 # long as a wrong password and doesn't reveal which accounts exist.
 DUMMY_HASH = None
+
+
+# ---------------------------------------------------------------- word filter
+# The list lives in server/blocked-words.txt (see the notes at its top) and is
+# re-read whenever the file changes.
+
+WORDS_FILE = os.path.join(ROOT, "server", "blocked-words.txt")
+_words = {"mtime": None, "patterns": []}
+_words_lock = threading.Lock()
+
+# Endings allowed after a plain "word" entry: ass -> asses, damn -> damned.
+WORD_ENDINGS = r"(?:s|es|ed|d|er|ers|ing|y|ies)?"
+# Look-alike characters, only swapped when they sit in a chunk that has
+# letters, so "455 points" stays a number.
+LEET = str.maketrans({"0": "o", "1": "i", "3": "e", "4": "a", "5": "s",
+                      "7": "t", "8": "b", "9": "g", "@": "a", "$": "s"})
+
+
+def _word_pattern(entry):
+    """'shit*' -> regex. Each letter may repeat (fuuuck), but never fewer
+    times than in the entry, so 'ass' matches 'asss' but not 'as'."""
+    exact = entry.startswith("=")
+    word = entry.lstrip("=").strip("*")
+    core = "".join(re.escape(m.group(1)) + "{%d,}" % len(m.group(0))
+                   for m in re.finditer(r"(.)\1*", word))
+    if entry.startswith("*") and entry.endswith("*"):
+        return re.compile(core)
+    if entry.endswith("*"):
+        return re.compile("^" + core)
+    return re.compile("^" + core + ("" if exact else WORD_ENDINGS) + "$")
+
+
+def blocked_patterns():
+    try:
+        mtime = os.path.getmtime(WORDS_FILE)
+    except OSError:
+        return _words["patterns"]
+    with _words_lock:
+        if mtime != _words["mtime"]:
+            patterns = []
+            with open(WORDS_FILE, encoding="utf-8") as f:
+                for line in f:
+                    entry = normalize(line.split("#", 1)[0].strip())
+                    if entry.lstrip("=").strip("*"):
+                        patterns.append(_word_pattern(entry))
+            _words["patterns"] = patterns
+            _words["mtime"] = mtime
+        return _words["patterns"]
+
+
+def normalize(text):
+    """Lowercase, drop accents and invisible characters."""
+    text = unicodedata.normalize("NFKD", text.lower())
+    return "".join(c for c in text if not unicodedata.combining(c)
+                   and unicodedata.category(c) != "Cf")
+
+
+def candidate_words(text):
+    """Every word a blocked word could be hiding in."""
+    words = []
+    singles = []  # runs of lone letters: "f u c k" -> "fuck"
+    for chunk in normalize(text).split():
+        if re.search(r"[a-z]", chunk):
+            chunk = chunk.translate(LEET)
+            chunk = re.sub(r"(?<=[a-z0-9])[!|](?=[a-z0-9])", "i", chunk)  # sh!t
+        parts = re.findall(r"[a-z]+", chunk)
+        words.extend(parts)
+        if len(parts) > 1:
+            words.append("".join(parts))  # fu-ck, f.u.c.k
+        for p in parts:
+            if len(p) == 1:
+                singles.append(p)
+            else:
+                if len(singles) > 1:
+                    words.append("".join(singles))
+                singles = []
+        if not parts:
+            if len(singles) > 1:
+                words.append("".join(singles))
+            singles = []
+    if len(singles) > 1:
+        words.append("".join(singles))
+    return words
+
+
+def has_blocked_word(text):
+    patterns = blocked_patterns()
+    return any(p.search(w) for w in candidate_words(text) for p in patterns)
 
 
 # ---------------------------------------------------------------- game list
@@ -393,6 +482,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
              "Usernames are 3-20 letters, numbers, - or _.")
         need(isinstance(password, str) and 8 <= len(password) <= 200, 400,
              "Passwords need at least 8 characters.")
+        need(not has_blocked_word(name), 400, "That username isn't allowed. Try another.")
         need(LIMITS.take("signup:" + self.client_ip(), 5, 3600), 429,
              "Too many new accounts from here. Try again in an hour.")
         exists = con.execute("SELECT 1 FROM users WHERE username = ?", (name,)).fetchone()
@@ -464,6 +554,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         need(body, 400, "Write a comment first.")
         need(len(body) <= MAX_COMMENT, 400,
              "Comments can be up to %d characters." % MAX_COMMENT)
+        need(not has_blocked_word(body), 400,
+             "Please keep it clean. Your comment has a word that isn't allowed here.")
         uid = str(user["id"])
         need(LIMITS.allowed("comment-min:" + uid, 5, 60) and
              LIMITS.allowed("comment-day:" + uid, 50, 86400), 429,

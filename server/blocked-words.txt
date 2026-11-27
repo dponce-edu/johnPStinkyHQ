@@ -1,0 +1,100 @@
+# Words not allowed in comments or usernames. One per line; # starts a note.
+# The server re-reads this file whenever it changes, so no restart is needed.
+#
+# Matching ignores capitals, accents, stretched letters (fuuuck), common
+# l33t spellings (sh1t, a$$), and letters split up (f u c k, f.u.c.k, fu-ck).
+#
+#   word     the word on its own, plus endings like -s, -es, -ed, -er, -ing, -y
+#   =word    the word on its own, exactly       (=spic blocks spic, not spicy)
+#   word*    any word that starts with it      (shit* also blocks shithead)
+#   *word*   anywhere inside a word            (only for words no normal word contains)
+#
+# If an ordinary word gets blocked by mistake, change its line from *word* to
+# word* or word, or delete it.
+
+# ---- swearing
+*fuck*
+*fuk*
+*fck*
+*fvck*
+*phuck*
+*shit*
+*bitch*
+*cunt*
+*twat*
+*wank*
+*dickhead*
+*asshole*
+*arsehole*
+*jackass*
+*dumbass*
+*badass*
+*bastard*
+*bullshit*
+*motherf*
+cock
+*pussy*
+*whore*
+*slut*
+*dildo*
+*boner*
+ass
+arse
+dick
+damn
+goddamn
+crap
+piss*
+prick
+bollocks
+bugger
+tits
+titty
+titties
+boob*
+douche*
+wtf
+stfu
+gtfo
+omfg
+
+# ---- sexual
+*porn*
+*penis*
+*vagina*
+*blowjob*
+*handjob*
+*orgasm*
+horny
+*hentai*
+*milf*
+sex
+nude*
+naked
+cum
+jizz*
+rape*
+rapist
+
+# ---- slurs and hate
+*nigg*
+*nigga*
+negro
+*fagg*
+fag
+fags
+*retard*
+*tranny*
+*kike*
+chink
+=spic
+=spics
+*wetback*
+*beaner*
+*gook*
+coon
+dyke
+*nazi*
+*hitler*
+*kkk*
+homo
