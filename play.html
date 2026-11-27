@@ -24,6 +24,27 @@
     <button id="reload" type="button">Restart</button>
     <button id="full" class="quiet" type="button">Full screen</button>
   </div>
+
+  <!-- Ratings and comments. Filled in by comments.js; stays hidden when the
+       comments server isn't running (e.g. on GitHub Pages). -->
+  <section id="community" class="community" hidden>
+    <h2>Rating</h2>
+    <div id="stars" class="stars" role="group" aria-label="Your rating"></div>
+    <p id="rating-summary" class="muted"></p>
+
+    <h2>Comments</h2>
+    <div id="account"></div>
+    <form id="comment-form" class="comment-form" hidden>
+      <label for="comment-body" class="sr-only">Your comment</label>
+      <textarea id="comment-body" rows="3" maxlength="1000" placeholder="Say something…" required></textarea>
+      <div class="controls">
+        <span id="comment-count" class="muted">0 / 1000</span>
+        <button type="submit">Post</button>
+      </div>
+    </form>
+    <p id="community-msg" class="muted" role="status" aria-live="polite"></p>
+    <ul id="comments" class="comments"></ul>
+  </section>
 </div>
 
 <dialog id="confirm-restart">
@@ -40,6 +61,7 @@
      https://ruffle.rs/downloads and point this src at the local ruffle.js -->
 <script src="https://unpkg.com/@ruffle-rs/ruffle"></script>
 <script src="games.js"></script>
+<script src="comments.js" defer></script>
 <script>
   var stage = document.getElementById("stage");
   var bezel = document.querySelector(".bezel");

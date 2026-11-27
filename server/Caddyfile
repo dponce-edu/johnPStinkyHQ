@@ -1,0 +1,34 @@
+# Caddy config for Club Escapade on the Pi.
+# Copy to /etc/caddy/Caddyfile, replace the domain, then: sudo systemctl reload caddy
+# Caddy gets and renews the HTTPS certificate on its own.
+
+clubescapade.example.com {
+	root * /srv/club-escapade/site
+	encode zstd gzip
+
+	# Accounts, comments and ratings: server/app.py
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	handle {
+		# The repo checkout holds files that must never be public. "hide"
+		# checks the actual file, so odd URLs like /./server/ can't get past it.
+		file_server {
+			hide .git .gitignore server data
+		}
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}
+
+# A second site on the same Pi, e.g. your personal site:
+#
+# yourname.example.com {
+# 	root * /srv/personal-site
+# 	file_server
+# }

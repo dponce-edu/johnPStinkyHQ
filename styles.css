@@ -203,3 +203,88 @@ dialog {
 }
 dialog p { margin: 0; }
 dialog::backdrop { background: rgba(0, 0, 0, .7); }
+
+/* ---------- Ratings, comments and log-in (comments.js) ---------- */
+.community {
+  max-width: 640px;
+  margin: 2rem auto 0;
+}
+.community h2 { font-size: 1.2rem; margin: 1.5rem 0 .5rem; }
+.muted { color: var(--muted); }
+.community p { margin: .25rem 0; }
+
+.stars { display: flex; justify-content: center; gap: .1rem; }
+.stars button {
+  background: transparent;
+  color: var(--bezel);
+  font-size: 2rem;
+  line-height: 1;
+  padding: .1rem .2rem;
+  text-shadow: inherit;
+}
+.stars button.on, .stars button:hover { color: var(--ink); }
+
+input[type="text"], input[type="password"], textarea {
+  font: inherit;
+  color: var(--ink);
+  background: #000;
+  border: 2px solid var(--bezel);
+  border-radius: 8px;
+  padding: .55rem .75rem;
+}
+input:focus-visible, textarea:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+::placeholder { color: var(--muted); opacity: 1; }
+
+.auth {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  justify-content: center;
+}
+.auth input { flex: 1 1 10rem; min-width: 0; }
+
+.comment-form textarea { width: 100%; resize: vertical; display: block; }
+.comment-form .controls { margin-top: .5rem; justify-content: space-between; }
+
+button.link {
+  background: none;
+  color: var(--ink);
+  padding: 0;
+  font-weight: inherit;
+  text-decoration: underline;
+  text-shadow: inherit;
+}
+button:disabled { opacity: .5; cursor: progress; }
+
+.comments {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: grid;
+  gap: .75rem;
+}
+.comments li {
+  background: rgba(0, 0, 0, .85);
+  border: 2px solid var(--bezel);
+  border-radius: 10px;
+  padding: .6rem .9rem;
+}
+.comments li.empty { color: var(--muted); }
+.comments .meta { color: var(--muted); font-size: .9rem; }
+.comments .meta strong { color: var(--ink); }
+.comments .body { margin-top: .3rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.card .rating { color: var(--ink); font-size: .9rem; margin-top: .3rem; }
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
