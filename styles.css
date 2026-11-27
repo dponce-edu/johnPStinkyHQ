@@ -111,17 +111,17 @@ a:focus-visible, button:focus-visible {
   --ar: 4 / 3;
   --ar-num: 1.3333;
   background: var(--bezel);
-  padding: 10px;
-  border-radius: 14px;
+  padding: 4px;
+  border-radius: 8px;
   margin-inline: auto;
-  width: min(100%, max(320px, (100vh - 13rem) * var(--ar-num) + 20px));
+  width: min(100%, max(320px, (100vh - 13rem) * var(--ar-num) + 8px));
   transition: width .2s ease;
 }
 #stage {
   width: 100%;
   aspect-ratio: var(--ar);
   background: var(--screen);
-  border-radius: 6px;
+  /* Square corners: rounding here would clip the edges of the game. */
   overflow: hidden;
   position: relative;
 }
