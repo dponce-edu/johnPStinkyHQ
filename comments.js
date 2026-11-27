@@ -90,7 +90,11 @@
       out.className = "link";
       out.textContent = "Log out";
       out.addEventListener("click", function () {
-        api("POST", "/api/logout").then(function () { setUser(null); say("Logged out."); }, fail);
+        api("POST", "/api/logout").then(function () {
+          setUser(null);
+          say("Logged out.");
+          return refresh(); // drop the Delete / Report buttons that came with the session
+        }).catch(fail);
       });
       p.append(out);
       el.account.append(p);
@@ -183,6 +187,22 @@
         del.addEventListener("click", function () { confirmDelete(c, del); });
         meta.append(" · ", del);
       }
+      if (c.reported) {
+        meta.append(" · Reported");
+      } else if (c.canReport) {
+        var rep = document.createElement("button");
+        rep.type = "button";
+        rep.className = "link";
+        rep.textContent = "Report";
+        rep.addEventListener("click", function () { confirmReport(c, rep); });
+        meta.append(" · ", rep);
+      }
+      if (c.reports) { // only sent to admins
+        var flag = document.createElement("span");
+        flag.className = "flagged";
+        flag.textContent = "⚑ " + c.reports + " report" + (c.reports === 1 ? "" : "s");
+        meta.append(" · ", flag);
+      }
       var body = document.createElement("p");
       body.className = "body";
       body.textContent = c.body; // plain text only, never HTML
@@ -207,6 +227,29 @@
       if (!button.isConnected) return;
       delete button.dataset.armed;
       button.textContent = "Delete";
+    }, 4000);
+  }
+
+  // Same two-step pattern as delete, so a stray click doesn't report anyone.
+  function confirmReport(comment, button) {
+    if (button.dataset.armed) {
+      button.disabled = true;
+      api("POST", "/api/comments/" + comment.id + "/report").then(function () {
+        comment.reported = true;
+        renderComments();
+        say("Thanks. A teacher will take a look.");
+      }, function (err) {
+        button.disabled = false;
+        fail(err);
+      });
+      return;
+    }
+    button.dataset.armed = "1";
+    button.textContent = "Report this comment?";
+    setTimeout(function () {
+      if (!button.isConnected || button.disabled) return;
+      delete button.dataset.armed;
+      button.textContent = "Report";
     }, 4000);
   }
 

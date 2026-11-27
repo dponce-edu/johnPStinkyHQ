@@ -275,6 +275,7 @@ button:disabled { opacity: .5; cursor: progress; }
 .comments li.empty { color: var(--muted); }
 .comments .meta { color: var(--muted); font-size: .9rem; }
 .comments .meta strong { color: var(--ink); }
+.comments .flagged { color: #ff6666; font-weight: 600; }
 .comments .body { margin-top: .3rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .card .rating { color: var(--ink); font-size: .9rem; margin-top: .3rem; }

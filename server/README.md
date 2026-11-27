@@ -79,7 +79,14 @@ Run these with `sudo -u clubescapade python3 /srv/club-escapade/site/server/app.
 | `list-users` | Shows every account |
 | `make-admin NAME` / `remove-admin NAME` | Admins can delete anyone's comment |
 | `ban NAME` / `unban NAME` | Banning logs them out and hides their comments and ratings |
+| `list-comments` | Shows the 20 newest comments with their IDs and report counts. Add `--reported`, `--game ID`, `--user NAME` or `-n 50` to narrow or widen it |
 | `delete-comment ID` | Deletes one comment |
+| `clear-reports ID` | Keeps a reported comment and drops its reports |
+
+**Reports:** logged-in users can report anyone else's comment, once each. Reported
+comments stay up until you act. Admins see a red "⚑ N reports" on them on the
+site, and `list-comments --reported` lists them on the Pi. Then delete the
+comment, ban its author, or `clear-reports` if it's fine.
 
 **Update the site** after pushing changes to GitHub:
 ```sh

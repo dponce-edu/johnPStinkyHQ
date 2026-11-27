@@ -75,6 +75,12 @@ CREATE TABLE IF NOT EXISTS ratings (
     updated  INTEGER NOT NULL,
     PRIMARY KEY (game, user_id)
 );
+CREATE TABLE IF NOT EXISTS reports (
+    comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created    INTEGER NOT NULL,
+    PRIMARY KEY (comment_id, user_id)
+);
 """
 
 
@@ -292,6 +298,7 @@ ROUTES = [
     ("POST", r"/api/games/" + GAME_ID + r"/comments", "add_comment"),
     ("PUT", r"/api/games/" + GAME_ID + r"/rating", "rate"),
     ("DELETE", r"/api/comments/(\d+)", "delete_comment"),
+    ("POST", r"/api/comments/(\d+)/report", "report_comment"),
 ]
 
 # Never served by --dev, even though they sit in the site folder.
@@ -531,17 +538,27 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.check_game(game)
         user = self.current_user(con)
         rows = con.execute(
-            "SELECT c.id, c.body, c.created, c.user_id, u.username "
+            "SELECT c.id, c.body, c.created, c.user_id, u.username, "
+            "(SELECT COUNT(*) FROM reports r WHERE r.comment_id = c.id) AS reports, "
+            "EXISTS (SELECT 1 FROM reports r WHERE r.comment_id = c.id AND r.user_id = ?) AS mine "
             "FROM comments c JOIN users u ON u.id = c.user_id "
             "WHERE c.game = ? AND u.banned = 0 ORDER BY c.id DESC LIMIT 200",
-            (game,)).fetchall()
-        comments = [{
-            "id": r["id"],
-            "user": r["username"],
-            "body": r["body"],
-            "created": r["created"],
-            "canDelete": bool(user and (user["id"] == r["user_id"] or user["is_admin"])),
-        } for r in rows]
+            (user["id"] if user else 0, game)).fetchall()
+        comments = []
+        for r in rows:
+            own = bool(user and user["id"] == r["user_id"])
+            c = {
+                "id": r["id"],
+                "user": r["username"],
+                "body": r["body"],
+                "created": r["created"],
+                "canDelete": bool(own or (user and user["is_admin"])),
+                "canReport": bool(user and not own),
+                "reported": bool(r["mine"]),
+            }
+            if user and user["is_admin"]:
+                c["reports"] = r["reports"]  # only admins see how many
+            comments.append(c)
         return 200, {"comments": comments, "rating": rating_summary(con, game, user)}
 
     def api_add_comment(self, con, game):
@@ -593,6 +610,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
              "You can only delete your own comments.")
         con.execute("DELETE FROM comments WHERE id = ?", (int(comment_id),))
         return 200, {"deleted": int(comment_id)}
+
+    def api_report_comment(self, con, comment_id):
+        user = self.require_user(con, "Log in to report a comment.")
+        row = con.execute("SELECT user_id FROM comments WHERE id = ?",
+                          (int(comment_id),)).fetchone()
+        need(row is not None, 404, "That comment is already gone.")
+        need(row["user_id"] != user["id"], 400, "You can't report your own comment.")
+        need(LIMITS.take("report:" + str(user["id"]), 20, 3600), 429,
+             "You've sent a lot of reports. Try again later.")
+        con.execute("INSERT OR IGNORE INTO reports (comment_id, user_id, created) "
+                    "VALUES (?, ?, ?)", (int(comment_id), user["id"], int(time.time())))
+        return 200, {"reported": int(comment_id)}
 
     def api_all_ratings(self, con):
         rows = con.execute(
@@ -675,6 +704,46 @@ def cmd_delete_comment(args):
     print("Deleted comment %d." % args.id if cur.rowcount else "No comment %d." % args.id)
 
 
+def cmd_list_comments(args):
+    init_db()
+    con = connect()
+    where, params = [], []
+    if args.game:
+        where.append("c.game = ?")
+        params.append(args.game)
+    if args.user:
+        where.append("u.id = ?")
+        params.append(find_user(con, args.user)["id"])
+    if args.reported:
+        where.append("reports > 0")
+    sql = ("SELECT c.id, c.game, c.body, c.created, u.username, u.banned, "
+           "(SELECT COUNT(*) FROM reports r WHERE r.comment_id = c.id) AS reports "
+           "FROM comments c JOIN users u ON u.id = c.user_id")
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    rows = con.execute(sql + " ORDER BY c.id DESC LIMIT ?", params + [args.limit]).fetchall()
+    if not rows:
+        print("No reported comments." if args.reported else "No comments.")
+        return
+    for r in reversed(rows):  # oldest first, so the newest ends up by the prompt
+        body = " ".join(r["body"].split())
+        if len(body) > 70:
+            body = body[:69] + "…"
+        print("%5d  %s  %-20s %-20s %s%s%s" % (
+            r["id"], time.strftime("%Y-%m-%d %H:%M", time.localtime(r["created"])),
+            r["game"][:20], r["username"],
+            "[%d report%s] " % (r["reports"], "" if r["reports"] == 1 else "s") if r["reports"] else "",
+            "(banned) " if r["banned"] else "", body))
+
+
+def cmd_clear_reports(args):
+    init_db()
+    con = connect()
+    cur = con.execute("DELETE FROM reports WHERE comment_id = ?", (args.id,))
+    con.commit()
+    print("Cleared %d report%s on comment %d." % (cur.rowcount, "" if cur.rowcount == 1 else "s", args.id))
+
+
 def cmd_list_users(args):
     init_db()
     con = connect()
@@ -702,6 +771,13 @@ def main():
                        ("unban", "lift a ban")):
         sub.add_parser(name, help=text).add_argument("username")
     sub.add_parser("delete-comment", help="delete one comment by id").add_argument("id", type=int)
+    lc = sub.add_parser("list-comments", help="show recent comments with their ids")
+    lc.add_argument("--game", help="only this game id, e.g. red-ball")
+    lc.add_argument("--user", help="only this username")
+    lc.add_argument("-n", "--limit", type=int, default=20, help="how many (default 20)")
+    lc.add_argument("--reported", action="store_true", help="only comments someone reported")
+    sub.add_parser("clear-reports", help="keep a reported comment and drop its reports"
+                   ).add_argument("id", type=int)
     sub.add_parser("list-users", help="show every account")
 
     args = parser.parse_args()
@@ -718,6 +794,10 @@ def main():
         cmd_set_flag(args, "banned", 0, "%s is unbanned.")
     elif args.command == "delete-comment":
         cmd_delete_comment(args)
+    elif args.command == "list-comments":
+        cmd_list_comments(args)
+    elif args.command == "clear-reports":
+        cmd_clear_reports(args)
     elif args.command == "list-users":
         cmd_list_users(args)
 
