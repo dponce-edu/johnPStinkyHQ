@@ -11,6 +11,7 @@
 <div class="wrap">
   <div class="topbar">
     <h1 id="title">Flash Player</h1>
+    <p id="unlocked-note" class="unlocked-note" role="status" hidden>Unlocked! It's on your homepage now.</p>
     <a class="back" href="index.html">&larr; All games</a>
   </div>
 
@@ -70,6 +71,7 @@
   var titleEl = document.getElementById("title");
   var player = null;
   var last = null;
+  var locked = false; // this person hasn't unlocked this game yet
 
   function show(html) { message.innerHTML = html; message.hidden = false; }
   function hideMessage() { message.hidden = true; }
@@ -111,14 +113,57 @@
     hideMessage();
     // openUrlMode "deny": stop games from opening links or redirecting the page
     // (Flash getURL / navigateToURL). Use "confirm" to ask the player instead.
-    var options = Object.assign({ openUrlMode: "deny" }, source);
+    // A locked game waits for Ruffle's big Play button; pressing it unlocks.
+    var options = Object.assign({ openUrlMode: "deny" }, source,
+                                locked ? { autoplay: "off" } : {});
     var result = ensurePlayer().load(options);
+    if (locked) watchForPlay();
     if (result && result.catch) {
       result.catch(function (err) {
         console.error(err);
         show("Couldn't load " + label + '. <a href="index.html">Pick another game</a>');
       });
     }
+  }
+
+  // Ruffle has no "started playing" event, so check a few times a second
+  // until its Play button has been pressed, then unlock the game.
+  var playWatch = null;
+  function watchForPlay() {
+    clearInterval(playWatch); // Restart: only ever one watcher
+    var timer = playWatch = setInterval(function () {
+      if (!locked) { clearInterval(timer); return; }
+      if (!player || !player.isPlaying) return;
+      clearInterval(timer);
+      fetch("/api/games/" + encodeURIComponent(game.id) + "/unlock", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: "{}"
+      }).then(function (res) {
+        if (!res.ok) throw new Error("unlock failed: " + res.status);
+        locked = false;
+        setTitle(game.title);
+        titleEl.classList.add("just-unlocked");
+        var note = document.getElementById("unlocked-note");
+        note.hidden = false;
+        setTimeout(function () { note.hidden = true; }, 4000);
+      }).catch(function (err) {
+        console.warn(err);
+        setTimeout(watchForPlay, 3000); // try again shortly
+      });
+    }, 250);
+  }
+
+  // Has this person unlocked the game? Without a server (e.g. GitHub Pages)
+  // everything counts as unlocked.
+  function unlockedHere(gameId) {
+    return fetch("/api/unlocks", { credentials: "same-origin" }).then(function (res) {
+      var type = res.headers.get("Content-Type") || "";
+      return res.ok && type.indexOf("application/json") !== -1 ? res.json() : null;
+    }).then(function (data) {
+      return !data || data.all || data.unlocked.indexOf(gameId) !== -1;
+    }).catch(function () { return true; });
   }
 
   var id = new URLSearchParams(location.search).get("game");
@@ -145,7 +190,7 @@
 
   window.addEventListener("load", function () {
     if (game) {
-      setTitle(game.title);
+      setTitle("???");
       // Optional override from games.js, used until the game reports its own size.
       if (game.ratio) {
         var parts = String(game.ratio).split("/");
@@ -153,8 +198,13 @@
       }
       // Fetch this person's saves from the server first, so the game finds them.
       show("Loading your saves…");
-      var ready = window.cloudSaves ? cloudSaves.start() : Promise.resolve();
-      ready.then(function () {
+      var ready = Promise.all([
+        window.cloudSaves ? cloudSaves.start() : Promise.resolve(),
+        unlockedHere(game.id)
+      ]);
+      ready.then(function (results) {
+        locked = !results[1];
+        if (!locked) setTitle(game.title);
         // encodeURI handles file names with spaces
         play({ url: encodeURI(game.file) }, game.title);
       });

@@ -20,6 +20,7 @@
   </header>
 
   <main>
+    <p id="unlock-count" class="unlock-count" hidden></p>
     <ul id="grid" class="grid"></ul>
     <p id="empty" class="empty" hidden>No games yet. Add one in games.js.</p>
   </main>
@@ -44,8 +45,30 @@
     return ph;
   }
 
-  games.forEach(function (game) {
-    var li = document.createElement("li");
+  // A game nobody has unlocked yet: a "?" instead of its picture and name.
+  function lockedCard(game) {
+    var a = document.createElement("a");
+    a.className = "card locked";
+    a.href = "play.html?game=" + encodeURIComponent(game.id);
+    a.setAttribute("aria-label", "Locked game. Open it and press Play to unlock it.");
+    var thumb = document.createElement("div");
+    thumb.className = "thumb";
+    var q = document.createElement("div");
+    q.className = "ph mystery";
+    q.textContent = "?";
+    thumb.appendChild(q);
+    var info = document.createElement("div");
+    info.className = "info";
+    var h2 = document.createElement("h2");
+    h2.textContent = "???";
+    var p = document.createElement("p");
+    p.textContent = "Press Play to unlock.";
+    info.append(h2, p);
+    a.append(thumb, info);
+    return a;
+  }
+
+  function card(game) {
     var a = document.createElement("a");
     a.className = "card";
     a.href = "play.html?game=" + encodeURIComponent(game.id);
@@ -73,11 +96,59 @@
 
     a.appendChild(thumb);
     a.appendChild(info);
-    li.appendChild(a);
-    grid.appendChild(li);
-  });
+    return a;
+  }
 
-  if (!games.length) document.getElementById("empty").hidden = false;
+  // unlocked: the set of game ids this person has unlocked, or null for all
+  // (admins, or no server, e.g. GitHub Pages). Games unlocked since the last
+  // visit get a reveal animation; "seen" remembers which were already shown.
+  function render(unlocked, seenKey) {
+    var seen = {};
+    try { seen = JSON.parse(localStorage.getItem(seenKey) || "{}"); } catch (e) {}
+    var count = 0;
+    games.forEach(function (game) {
+      var open = !unlocked || unlocked[game.id];
+      var li = document.createElement("li");
+      var a = open ? card(game) : lockedCard(game);
+      if (open) count++;
+      if (open && unlocked && seenKey && !seen[game.id]) {
+        a.classList.add("just-unlocked");
+        seen[game.id] = 1;
+      }
+      li.appendChild(a);
+      grid.appendChild(li);
+    });
+    if (seenKey) localStorage.setItem(seenKey, JSON.stringify(seen));
+    if (unlocked) {
+      var tally = document.getElementById("unlock-count");
+      tally.textContent = count + " of " + games.length + " games unlocked";
+      tally.hidden = false;
+    }
+    if (!games.length) document.getElementById("empty").hidden = false;
+    loadRatings();
+  }
+
+  // Ask the server what's unlocked before drawing anything, so locked games'
+  // pictures never flash up. No answer in 4 s, or no server: show everything.
+  var drawn = false;
+  function draw(unlocked, seenKey) {
+    if (drawn) return;
+    drawn = true;
+    render(unlocked, seenKey);
+  }
+  setTimeout(function () { draw(null); }, 4000);
+  fetch("/api/unlocks", { credentials: "same-origin" })
+    .then(function (res) {
+      var type = res.headers.get("Content-Type") || "";
+      return res.ok && type.indexOf("application/json") !== -1 ? res.json() : null;
+    })
+    .then(function (data) {
+      if (!data || data.all) return draw(null);
+      var set = {};
+      data.unlocked.forEach(function (id) { set[id] = true; });
+      draw(set, "ce-unlocks-seen:" + data.user);
+    })
+    .catch(function () { draw(null); });
 
   // Who's logged in, from the server. Stays hidden without one (GitHub Pages).
   fetch("/api/me", { credentials: "same-origin" })
@@ -104,26 +175,29 @@
     }).finally(function () { location.href = "login.html"; });
   });
 
-  // Average ratings from the comments server, if it's running.
-  fetch("/api/ratings", { credentials: "same-origin" })
-    .then(function (res) {
-      var type = res.headers.get("Content-Type") || "";
-      return res.ok && type.indexOf("application/json") !== -1 ? res.json() : null;
-    })
-    .then(function (data) {
-      if (!data) return;
-      Object.keys(data.ratings).forEach(function (id) {
-        var info = grid.querySelector('.info[data-game="' + id + '"]');
-        if (!info) return;
-        var r = data.ratings[id];
-        var p = document.createElement("p");
-        p.className = "rating";
-        p.textContent = "★ " + r.avg.toFixed(1) + " (" + r.count + ")";
-        p.setAttribute("aria-label", "Rated " + r.avg.toFixed(1) + " out of 5 by " + r.count);
-        info.appendChild(p);
-      });
-    })
-    .catch(function () { /* no server: no ratings shown */ });
+  // Average ratings from the comments server, if it's running. Locked cards
+  // have no data-game, so they never show one.
+  function loadRatings() {
+    fetch("/api/ratings", { credentials: "same-origin" })
+      .then(function (res) {
+        var type = res.headers.get("Content-Type") || "";
+        return res.ok && type.indexOf("application/json") !== -1 ? res.json() : null;
+      })
+      .then(function (data) {
+        if (!data) return;
+        Object.keys(data.ratings).forEach(function (id) {
+          var info = grid.querySelector('.info[data-game="' + id + '"]');
+          if (!info) return;
+          var r = data.ratings[id];
+          var p = document.createElement("p");
+          p.className = "rating";
+          p.textContent = "★ " + r.avg.toFixed(1) + " (" + r.count + ")";
+          p.setAttribute("aria-label", "Rated " + r.avg.toFixed(1) + " out of 5 by " + r.count);
+          info.appendChild(p);
+        });
+      })
+      .catch(function () { /* no server: no ratings shown */ });
+  }
 </script>
 </body>
 </html>

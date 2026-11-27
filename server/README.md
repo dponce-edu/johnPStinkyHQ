@@ -96,6 +96,7 @@ Run these with `sudo -u clubescapade python3 /srv/club-escapade/site/server/app.
 | `delete-comment ID` | Deletes one comment |
 | `reset-pin NAME` | Gives them a new random PIN and logs them out everywhere. Add `--choose` to type one yourself |
 | `clear-reports ID` | Keeps a reported comment and drops its reports |
+| `reset-unlocks NAME` | Hides all their games behind the "?" again. Add `--game ID` for just one |
 | `clear-saves NAME` | Deletes all of someone's game saves. Add `--game ID` for just one game |
 
 **Accounts and invites:** every account has three names.
@@ -145,6 +146,13 @@ cd /srv/club-escapade/site && sudo git pull && sudo systemctl restart club-escap
 Keep the backups on a different drive than the database.
 
 **Logs:** `journalctl -u club-escapade -f`
+
+**Unlocking games:** each student starts with every game hidden behind a "?"
+on the homepage, with no title or picture. Opening one shows "???" and
+Ruffle's big Play button. Pressing it unlocks that game for them: the title
+appears, and back on the homepage the card flips over to show the game. The
+homepage counts "N of 43 games unlocked". Admins see every game. Without the
+server (GitHub Pages), nothing is locked.
 
 **Game saves** follow each student's account (`saves.js`). Opening a game
 downloads their saves first. Playing uploads changes every 15 seconds and on

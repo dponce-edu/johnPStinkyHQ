@@ -100,6 +100,13 @@ CREATE TABLE IF NOT EXISTS saves (
     updated  INTEGER NOT NULL,
     PRIMARY KEY (user_id, key)
 );
+-- Games each person has unlocked by pressing Play (see play.html).
+CREATE TABLE IF NOT EXISTS unlocks (
+    user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    game     TEXT NOT NULL,
+    created  INTEGER NOT NULL,
+    PRIMARY KEY (user_id, game)
+);
 CREATE TABLE IF NOT EXISTS reports (
     comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
     user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -432,6 +439,8 @@ ROUTES = [
     ("PUT", r"/api/games/" + GAME_ID + r"/rating", "rate"),
     ("DELETE", r"/api/comments/(\d+)", "delete_comment"),
     ("POST", r"/api/comments/(\d+)/report", "report_comment"),
+    ("GET", r"/api/unlocks", "unlocks"),
+    ("POST", r"/api/games/" + GAME_ID + r"/unlock", "unlock"),
     ("GET", r"/api/saves", "saves"),
     ("POST", r"/api/saves", "update_saves"),
     # Admin tools page (admin.html). Every one checks the user is an admin.
@@ -961,6 +970,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         con.execute("DELETE FROM users WHERE id = ?", (row["id"],))
         return 200, {"deleted": row["id"]}
 
+    # -- API: unlocking games
+    # Every game starts hidden behind a "?" on the homepage. Pressing Play on
+    # a game unlocks it for that person. Admins see everything.
+
+    def api_unlocks(self, con):
+        user = self.require_user(con, "Log in first.")
+        rows = con.execute("SELECT game FROM unlocks WHERE user_id = ? ORDER BY created",
+                           (user["id"],))
+        return 200, {"user": user["username"], "all": bool(user["is_admin"]),
+                     "unlocked": [r["game"] for r in rows]}
+
+    def api_unlock(self, con, game):
+        self.check_game(game)
+        user = self.require_user(con, "Log in first.")
+        cur = con.execute("INSERT OR IGNORE INTO unlocks (user_id, game, created) VALUES (?, ?, ?)",
+                          (user["id"], game, int(time.time())))
+        return 200, {"game": game, "new": cur.rowcount == 1}
+
     # -- API: Flash game saves
 
     def api_saves(self, con):
@@ -1239,6 +1266,20 @@ def cmd_timeout(args):
         print("%s's timeout is over." % user["username"])
 
 
+def cmd_reset_unlocks(args):
+    init_db()
+    con = connect()
+    user = find_user(con, args.username)
+    sql, params = "DELETE FROM unlocks WHERE user_id = ?", [user["id"]]
+    if args.game:
+        sql += " AND game = ?"
+        params.append(args.game)
+    cur = con.execute(sql, params)
+    con.commit()
+    print("Locked %d game%s again for %s." % (cur.rowcount, "" if cur.rowcount == 1 else "s",
+                                              user["username"]))
+
+
 def cmd_list_users(args):
     init_db()
     con = connect()
@@ -1306,6 +1347,9 @@ def main():
     to.add_argument("username")
     to.add_argument("minutes", type=int, help="how long; 0 ends a timeout")
     sub.add_parser("end-timeout", help="let a timed-out user back in").add_argument("username")
+    ru = sub.add_parser("reset-unlocks", help="hide games behind the ? again for a user")
+    ru.add_argument("username")
+    ru.add_argument("--game", help="only this game id")
     sub.add_parser("list-users", help="show every account")
 
     args = parser.parse_args()
@@ -1343,6 +1387,8 @@ def main():
     elif args.command == "end-timeout":
         args.minutes = 0
         cmd_timeout(args)
+    elif args.command == "reset-unlocks":
+        cmd_reset_unlocks(args)
     elif args.command == "list-users":
         cmd_list_users(args)
 
