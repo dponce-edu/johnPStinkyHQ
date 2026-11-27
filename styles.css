@@ -122,7 +122,7 @@ a:focus-visible, button:focus-visible {
 .empty { color: var(--muted); }
 
 /* ---------- Player page ---------- */
-/* Title on top, "All games" link underneath. */
+/* "All games" link (and the unlocked note) above the game window. */
 .topbar {
   display: flex;
   flex-direction: column;
@@ -134,27 +134,109 @@ a:focus-visible, button:focus-visible {
 .back { font-weight: 600; text-decoration: none; }
 .back:hover { text-decoration: underline; }
 
-/* --ar is the game's width / height. play.html sets it from the game file
-   once it loads. The frame is as wide as the page allows, but never so tall
-   that it runs off the bottom of the screen (13rem leaves room for the title
-   and buttons). */
+/* The game window, styled like Windows 95: grey raised frame, navy title bar
+   with the game's name, and square bevelled buttons (mute, restart, full
+   screen) where Windows had minimize, maximize and close.
+   --ar is the game's width / height. play.html sets it from the game file
+   once it loads. The window is as wide as the page allows, but never so tall
+   that it runs off the bottom of the screen (13rem leaves room for the link
+   and title bar; 12px is the frame's left and right edges). */
 .bezel {
   --ar: 4 / 3;
   --ar-num: 1.3333;
-  background: var(--bezel);
-  padding: 4px;
-  border-radius: 8px;
+  --w95-face: #c0c0c0;
+  --w95-light: #ffffff;
+  --w95-shadow: #808080;
+  --w95-dark: #000000;
   margin-inline: auto;
-  width: min(100%, max(320px, (100vh - 13rem) * var(--ar-num) + 8px));
+  width: min(100%, max(320px, (100vh - 13rem) * var(--ar-num) + 12px));
   transition: width .2s ease;
 }
+.win95 {
+  background: var(--w95-face);
+  padding: 4px;
+  text-align: left;
+  text-shadow: none;
+  /* Two-tone raised edge: white/light grey top-left, black/dark grey bottom-right. */
+  box-shadow:
+    inset -1px -1px 0 var(--w95-dark),
+    inset 1px 1px 0 #dfdfdf,
+    inset -2px -2px 0 var(--w95-shadow),
+    inset 2px 2px 0 var(--w95-light),
+    6px 6px 0 rgba(0, 0, 0, .5);
+  font-family: "MS Sans Serif", "Microsoft Sans Serif", Tahoma, Geneva, Verdana, sans-serif;
+}
+.win95-titlebar {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  background: #000080;
+  color: #ffffff;
+  padding: 3px 3px 3px 6px;
+  margin-bottom: 4px;
+  min-height: 30px;
+}
+.win95-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.win95-buttons { display: flex; gap: 2px; flex-shrink: 0; }
+/* The Restart button gets a little gap before it, like Windows' Close button. */
+.win95-buttons #reload { margin-right: 2px; }
+.win95-btn {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--w95-face);
+  color: var(--w95-dark);
+  text-shadow: none;
+  display: grid;
+  place-items: center;
+  box-shadow:
+    inset -1px -1px 0 var(--w95-dark),
+    inset 1px 1px 0 var(--w95-light),
+    inset -2px -2px 0 var(--w95-shadow),
+    inset 2px 2px 0 #dfdfdf;
+}
+/* Pressed (and Mute while on): the bevel flips so the button looks pushed in. */
+.win95-btn:active,
+.win95-btn[aria-pressed="true"] {
+  box-shadow:
+    inset -1px -1px 0 var(--w95-light),
+    inset 1px 1px 0 var(--w95-dark),
+    inset -2px -2px 0 #dfdfdf,
+    inset 2px 2px 0 var(--w95-shadow);
+}
+.win95-btn:active svg,
+.win95-btn[aria-pressed="true"] svg { transform: translate(1px, 1px); }
+.win95-btn:focus-visible { outline: 1px dotted var(--w95-dark); outline-offset: -5px; }
+.win95-btn svg { width: 14px; height: 12px; fill: currentColor; }
+.win95-btn svg .stroke { fill: none; stroke: currentColor; stroke-width: 1.4; }
+.win95-btn .icon-muted,
+.win95-btn[aria-pressed="true"] .icon-sound { display: none; }
+.win95-btn[aria-pressed="true"] .icon-muted { display: block; }
+
 #stage {
   width: 100%;
   aspect-ratio: var(--ar);
   background: var(--screen);
+  /* Sunken edge around the game, the reverse of the window's raised one. */
+  border: 2px solid;
+  border-color: var(--w95-shadow) var(--w95-light) var(--w95-light) var(--w95-shadow);
   /* Square corners: rounding here would clip the edges of the game. */
   overflow: hidden;
   position: relative;
+  font-family: "Courier New", Courier, monospace;
 }
 #stage ruffle-player { width: 100%; height: 100%; display: block; }
 #message {
@@ -398,15 +480,9 @@ button:disabled { opacity: .5; cursor: progress; }
   60% { transform: perspective(600px) rotateY(-8deg); box-shadow: inset 0 0 0 2px var(--accent), 0 0 24px var(--ink); }
   100% { transform: none; }
 }
-#title.just-unlocked { animation: title-reveal .6s ease-out; }
-@keyframes title-reveal {
-  0% { opacity: 0; transform: scale(1.4); letter-spacing: .3em; }
-  100% { opacity: 1; transform: none; }
-}
 .unlock-count { margin: 0 0 1rem; color: var(--muted); }
-.unlocked-note { margin: 0; color: var(--ink); font-weight: 600; }
 @media (prefers-reduced-motion: reduce) {
-  .thumb .mystery, .card.just-unlocked, #title.just-unlocked { animation: none; }
+  .thumb .mystery, .card.just-unlocked { animation: none; }
 }
 
 .sr-only {

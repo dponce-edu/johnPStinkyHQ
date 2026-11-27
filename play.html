@@ -10,21 +10,42 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1 id="title">Flash Player</h1>
-    <p id="unlocked-note" class="unlocked-note" role="status" hidden>Unlocked! It's on your homepage now.</p>
     <a class="back" href="index.html">&larr; All games</a>
   </div>
 
-  <main class="bezel">
+  <!-- The game sits in a Windows 95-style window. The title bar shows the
+       game's name; its buttons are mute, restart and full screen. -->
+  <main class="bezel win95">
+    <div class="win95-titlebar">
+      <h1 id="title" class="win95-title">Flash Player</h1>
+      <div class="win95-buttons">
+        <button id="mute" class="win95-btn" type="button" aria-pressed="false" title="Mute" aria-label="Mute">
+          <svg class="icon-sound" viewBox="0 0 12 10" aria-hidden="true">
+            <path d="M0 3h2l3-3v10L2 7H0z"/>
+            <path class="stroke" d="M7 3.5q1 1.5 0 3M9 2q2.2 3 0 6"/>
+          </svg>
+          <svg class="icon-muted" viewBox="0 0 12 10" aria-hidden="true">
+            <path d="M0 3h2l3-3v10L2 7H0z"/>
+            <path class="stroke" d="M7.5 2.5l4 5M11.5 2.5l-4 5"/>
+          </svg>
+        </button>
+        <button id="reload" class="win95-btn" type="button" title="Restart" aria-label="Restart">
+          <svg viewBox="0 0 10 10" aria-hidden="true">
+            <path class="stroke" d="M8.2 3.2A3.6 3.6 0 1 0 8.6 6.5"/>
+            <path d="M6 0.6l3.6 0.4-0.6 3.6z"/>
+          </svg>
+        </button>
+        <button id="full" class="win95-btn" type="button" title="Full screen" aria-label="Full screen">
+          <svg viewBox="0 0 10 10" aria-hidden="true">
+            <path d="M0 0h10v10H0zM1 2v7h8V2z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
     <div id="stage">
       <div id="message">Loading player…</div>
     </div>
   </main>
-
-  <div class="controls">
-    <button id="reload" type="button">Restart</button>
-    <button id="full" class="quiet" type="button">Full screen</button>
-  </div>
 
   <!-- Ratings and comments. Filled in by comments.js; stays hidden when the
        comments server isn't running (e.g. on GitHub Pages). -->
@@ -102,6 +123,7 @@
       if (!watching && window.cloudSaves) { watching = true; cloudSaves.watchLeaving(); }
     });
     stage.appendChild(player);
+    applyMute();
     return player;
   }
 
@@ -145,10 +167,6 @@
         if (!res.ok) throw new Error("unlock failed: " + res.status);
         locked = false;
         setTitle(game.title);
-        titleEl.classList.add("just-unlocked");
-        var note = document.getElementById("unlocked-note");
-        note.hidden = false;
-        setTimeout(function () { note.hidden = true; }, 4000);
       }).catch(function (err) {
         console.warn(err);
         setTimeout(watchForPlay, 3000); // try again shortly
@@ -183,6 +201,23 @@
   confirmBox.addEventListener("click", function (e) {
     if (e.target === confirmBox) confirmBox.close(); // clicked the dimmed backdrop
   });
+
+  // Mute: remembered across games and visits on this computer.
+  var muteBtn = document.getElementById("mute");
+  var muted = false;
+  try { muted = localStorage.getItem("club-muted") === "1"; } catch (e) {}
+  function applyMute() {
+    muteBtn.setAttribute("aria-pressed", muted ? "true" : "false");
+    muteBtn.title = muted ? "Unmute" : "Mute";
+    muteBtn.setAttribute("aria-label", muteBtn.title);
+    if (player && "volume" in player) player.volume = muted ? 0 : 1;
+  }
+  muteBtn.addEventListener("click", function () {
+    muted = !muted;
+    try { localStorage.setItem("club-muted", muted ? "1" : "0"); } catch (e) {}
+    applyMute();
+  });
+  applyMute();
 
   document.getElementById("full").addEventListener("click", function () {
     if (player && player.enterFullscreen) player.enterFullscreen();
