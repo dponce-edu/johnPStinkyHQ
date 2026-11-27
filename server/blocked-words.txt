@@ -5,7 +5,6 @@
 # l33t spellings (sh1t, a$$), and letters split up (f u c k, f.u.c.k, fu-ck).
 #
 #   word     the word on its own, plus endings like -s, -es, -ed, -er, -ing, -y
-#   =word    the word on its own, exactly       (=spic blocks spic, not spicy)
 #   word*    any word that starts with it      (shit* also blocks shithead)
 #   *word*   anywhere inside a word            (only for words no normal word contains)
 #
@@ -75,6 +74,7 @@ cum
 jizz*
 rape*
 rapist
+goon
 
 # ---- slurs and hate
 *nigg*
@@ -87,8 +87,7 @@ fags
 *tranny*
 *kike*
 chink
-=spic
-=spics
+spic
 *wetback*
 *beaner*
 *gook*
@@ -98,3 +97,4 @@ dyke
 *hitler*
 *kkk*
 homo
+jew
