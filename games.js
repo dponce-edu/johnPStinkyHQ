@@ -9,8 +9,6 @@
 //   title  name shown on the card and the player page
 //   file   path to the .swf
 //   blurb  optional one-line description on the card
-//   thumb  optional image path. If left out, the site looks for thumbs/<id>.png,
-//          and shows a placeholder until that file exists.
 //   ratio  optional player shape as "width / height". Usually not needed: the
 //          player sizes itself to the game once it loads.
 //

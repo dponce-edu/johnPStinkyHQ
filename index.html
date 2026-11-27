@@ -32,16 +32,15 @@
   var grid = document.getElementById("grid");
   var games = window.GAMES || [];
 
-  function initials(title) {
-    var words = title.trim().split(/\s+/);
-    var s = words.length > 1 ? words[0][0] + words[1][0] : title.slice(0, 2);
-    return s.toUpperCase();
-  }
+  // Card layout experiments. Blurbs stay in games.js either way.
+  var SHOW_BLURBS = false;      // the one-line description under the title
+  var SHOW_TITLE_UNDER = false; // the title under the picture area (which already shows it)
 
+  // The card's picture area shows the game's name.
   function placeholder(game) {
     var ph = document.createElement("div");
     ph.className = "ph";
-    ph.textContent = initials(game.title);
+    ph.textContent = game.title;
     return ph;
   }
 
@@ -59,11 +58,16 @@
     thumb.appendChild(q);
     var info = document.createElement("div");
     info.className = "info";
-    var h2 = document.createElement("h2");
-    h2.textContent = "???";
-    var p = document.createElement("p");
-    p.textContent = "Press Play to unlock.";
-    info.append(h2, p);
+    if (SHOW_TITLE_UNDER) {
+      var h2 = document.createElement("h2");
+      h2.textContent = "???";
+      info.append(h2);
+    }
+    if (SHOW_BLURBS) {
+      var p = document.createElement("p");
+      p.textContent = "Press Play to unlock.";
+      info.append(p);
+    }
     a.append(thumb, info);
     return a;
   }
@@ -75,20 +79,17 @@
 
     var thumb = document.createElement("div");
     thumb.className = "thumb";
-    var img = document.createElement("img");
-    img.alt = "";
-    img.loading = "lazy";
-    img.src = game.thumb || "thumbs/" + game.id + ".png";
-    img.onerror = function () { thumb.replaceChildren(placeholder(game)); };
-    thumb.appendChild(img);
+    thumb.appendChild(placeholder(game));
 
     var info = document.createElement("div");
     info.className = "info";
     info.dataset.game = game.id;
-    var h2 = document.createElement("h2");
-    h2.textContent = game.title;
-    info.appendChild(h2);
-    if (game.blurb) {
+    if (SHOW_TITLE_UNDER) {
+      var h2 = document.createElement("h2");
+      h2.textContent = game.title;
+      info.appendChild(h2);
+    }
+    if (SHOW_BLURBS && game.blurb) {
       var p = document.createElement("p");
       p.textContent = game.blurb;
       info.appendChild(p);
