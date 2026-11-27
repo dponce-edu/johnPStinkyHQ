@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Join · Club Escapade</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Joining with an invite code from the teacher. The teacher already made
+     the account and its username (what the student logs in with). Here the
+     student enters the code, picks a screen name (what everyone else sees)
+     and a PIN (twice). Anyone can see this page. A link like
+     join.html?code=K7MP-3XQA fills in the code. -->
+<div class="wrap">
+  <header>
+    <h1>Club Escapade</h1>
+    <p id="step-title">Join with your invite code.</p>
+  </header>
+
+  <main class="login">
+    <!-- Step 1: invite code -->
+    <form id="step-code" class="pin-login" novalidate>
+      <label for="code">Invite code</label>
+      <input id="code" class="code-input" type="text" autocomplete="off" autocapitalize="characters"
+             spellcheck="false" maxlength="12" placeholder="XXXX-XXXX" required autofocus>
+      <button type="submit">Next</button>
+      <p class="muted auth-note">Already joined? <a href="login.html">Log in</a>.</p>
+    </form>
+
+    <!-- Step 2: screen name -->
+    <form id="step-name" class="pin-login" novalidate hidden>
+      <p class="muted hint">You'll log in with the username <strong id="username"></strong>.</p>
+      <label for="screen-name">Pick a screen name</label>
+      <input id="screen-name" type="text" autocomplete="nickname" autocapitalize="off"
+             spellcheck="false" maxlength="20" required>
+      <p class="muted hint">This is the name everyone else sees. 3–20 letters,
+        numbers, - or _. You can't change it later, so choose well!</p>
+      <button type="submit">Next</button>
+      <button type="button" class="quiet back-step" data-to="code">Back</button>
+    </form>
+
+    <!-- Step 3: PIN, typed twice -->
+    <form id="step-pin" class="pin-login" novalidate hidden>
+      <label for="pin" id="pin-label">Pick a PIN</label>
+      <!-- inputmode="none": on touch screens use the number pad below. -->
+      <input id="pin" class="pin-input" type="password" inputmode="none"
+             autocomplete="new-password">
+      <div id="keypad"></div>
+      <p class="muted hint">Remember it! You'll log in with your username
+        <strong class="username-again"></strong> and this PIN. Only your teacher can reset it.</p>
+      <button type="button" class="quiet back-step" data-to="name">Back</button>
+    </form>
+
+    <p id="msg" class="muted" role="status" aria-live="polite"></p>
+  </main>
+</div>
+
+<script src="pinpad.js"></script>
+<script>
+(function () {
+  var steps = {
+    code: document.getElementById("step-code"),
+    name: document.getElementById("step-name"),
+    pin: document.getElementById("step-pin")
+  };
+  var codeEl = document.getElementById("code");
+  var nameEl = document.getElementById("screen-name");
+  var pinEl = document.getElementById("pin");
+  var pinLabel = document.getElementById("pin-label");
+  var title = document.getElementById("step-title");
+  var msg = document.getElementById("msg");
+  var current = "code";
+  var busy = false;
+  var firstPin = null; // the PIN typed the first time, waiting for the repeat
+
+  pinEl.maxLength = PIN_LENGTH;
+  pinEl.placeholder = "•".repeat(PIN_LENGTH);
+
+  function post(path, body) {
+    return fetch(path, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    }).then(function (res) {
+      var type = res.headers.get("Content-Type") || "";
+      if (type.indexOf("application/json") === -1) throw new Error("The server isn't reachable.");
+      return res.json().then(function (data) {
+        if (!res.ok) throw new Error(data.error || "Something went wrong.");
+        return data;
+      });
+    });
+  }
+
+  function show(step, text) {
+    current = step;
+    Object.keys(steps).forEach(function (k) { steps[k].hidden = k !== step; });
+    title.textContent = {
+      code: "Join with your invite code.",
+      name: "Hi! Pick your screen name.",
+      pin: "Last step: pick your PIN."
+    }[step];
+    msg.textContent = text || "";
+    if (step === "code") codeEl.focus();
+    if (step === "name") nameEl.focus();
+    if (step === "pin") { firstPin = null; pinLabel.textContent = "Pick a " + PIN_LENGTH + "-digit PIN"; pad.clear(); pad.focus(); }
+  }
+
+  function shake(form) {
+    form.classList.remove("shake");
+    void form.offsetWidth; // restart the animation
+    form.classList.add("shake");
+  }
+
+  function run(form, promise) {
+    busy = true;
+    form.classList.add("busy");
+    form.querySelectorAll("button").forEach(function (b) { b.disabled = true; });
+    return promise.then(function (v) { return v; }, function (err) {
+      msg.textContent = err.message;
+      shake(form);
+      throw err;
+    }).finally(function () {
+      busy = false;
+      form.classList.remove("busy");
+      form.querySelectorAll("button").forEach(function (b) { b.disabled = false; });
+    });
+  }
+
+  // Step 1: is the code real?
+  steps.code.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (busy) return;
+    if (!codeEl.value.trim()) { msg.textContent = "Type the code from your teacher."; return; }
+    msg.textContent = "Checking…";
+    run(steps.code, post("/api/invite/check", { code: codeEl.value }))
+      .then(function (data) {
+        document.getElementById("username").textContent = data.username;
+        document.querySelector(".username-again").textContent = data.username;
+        show("name");
+      }, function () { codeEl.select(); });
+  });
+
+  // Step 2: is the screen name allowed and free?
+  steps.name.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (busy) return;
+    var name = nameEl.value.trim();
+    nameEl.value = name;
+    if (!name) { msg.textContent = "Type a screen name."; return; }
+    msg.textContent = "Checking…";
+    run(steps.name, post("/api/invite/check", { code: codeEl.value, screenName: name }))
+      .then(function () { show("pin"); }, function () { nameEl.select(); });
+  });
+
+  // Step 3: type the PIN, then type it again. The last digit moves on.
+  var pad = PinPad({
+    input: pinEl,
+    keypad: document.getElementById("keypad"),
+    length: PIN_LENGTH,
+    active: function () { return current === "pin"; },
+    busy: function () { return busy; },
+    onEnter: function () {
+      msg.textContent = "Your PIN needs " + PIN_LENGTH + " digits.";
+    },
+    onComplete: function (pin) {
+      if (firstPin === null) {
+        firstPin = pin;
+        pinLabel.textContent = "Type it again";
+        msg.textContent = "";
+        pad.clear();
+        return;
+      }
+      if (pin !== firstPin) {
+        shake(steps.pin);
+        show("pin", "Those didn't match. Pick your PIN again.");
+        return;
+      }
+      msg.textContent = "Setting up your account…";
+      run(steps.pin, post("/api/invite/join", {
+        code: codeEl.value, screenName: nameEl.value, pin: pin
+      })).then(function () {
+        location.replace("/");
+      }, function (err) {
+        // Someone took the name meanwhile, or the code stopped working.
+        if (/screen name/i.test(err.message)) show("name", err.message);
+        else if (/code/i.test(err.message)) show("code", err.message);
+        else show("pin", err.message);
+      });
+    }
+  });
+
+  document.querySelectorAll(".back-step").forEach(function (b) {
+    b.addEventListener("click", function () { show(b.dataset.to); });
+  });
+
+  // join.html?code=K7MP-3XQA fills in the code.
+  var given = new URLSearchParams(location.search).get("code");
+  if (given) codeEl.value = given;
+})();
+</script>
+</body>
+</html>

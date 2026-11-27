@@ -26,6 +26,25 @@
       </section>
 
       <section>
+        <h2>Invite a student</h2>
+        <p class="muted">Enter their proper name (only admins see it) and the username
+          they'll log in with. They use the code on the Join page to choose their
+          screen name (what others see) and their PIN.</p>
+        <form id="invite-form" class="invite-form">
+          <label for="invite-proper">Proper name</label>
+          <input id="invite-proper" type="text" autocomplete="off" maxlength="100"
+                 placeholder="e.g. Jamie Rivera">
+          <label for="invite-name">Username</label>
+          <input id="invite-name" type="text" autocomplete="off" autocapitalize="off"
+                 spellcheck="false" maxlength="20" placeholder="e.g. jamie_r">
+          <button type="submit">Make invite</button>
+        </form>
+
+        <h3>Waiting to join</h3>
+        <ul id="invites" class="comments"></ul>
+      </section>
+
+      <section>
         <h2>Time out a student</h2>
         <p class="muted">They're logged out right away and can't use the site until it ends.</p>
         <form id="timeout-form" class="timeout-form">
@@ -93,6 +112,12 @@
     if (minutes % 60 === 0) return plural(minutes / 60, "hour");
     return plural(minutes, "minute");
   }
+  // How this page names people: proper name, then the name others see.
+  function shown(u) {
+    var seen = u.screenName || u.name;
+    return u.adminName + (seen !== u.adminName ? " (" + seen + ")" : "");
+  }
+
   function plural(n, word) { return n + " " + word + (n === 1 ? "" : "s"); }
 
   function linkButton(text, onClick) {
@@ -138,11 +163,12 @@
         game.href = "play.html?game=" + encodeURIComponent(c.game);
         game.textContent = titles[c.game] || c.game;
         var who = document.createElement("strong");
-        who.textContent = c.user;
+        who.textContent = c.adminName;
+        var whoAccount = " (as " + c.user + ")";
         var flag = document.createElement("span");
         flag.className = "flagged";
         flag.textContent = "⚑ " + plural(c.reports, "report");
-        meta.append(game, " · ", who, " · " + ago(c.created) + " · ", flag);
+        meta.append(game, " · ", who, whoAccount + " · " + ago(c.created) + " · ", flag);
         if (c.banned) meta.append(" · banned");
         else if (c.timeoutUntil) meta.append(" · timed out");
 
@@ -169,8 +195,8 @@
               }).catch(fail);
             });
           }), " · ",
-          linkButton("Time out " + c.user, function () {
-            userSel.value = c.user;
+          linkButton("Time out " + c.adminName, function () {
+            userSel.value = c.username;
             form.scrollIntoView({ behavior: "smooth", block: "center" });
             lengthSel.focus();
           })
@@ -189,7 +215,7 @@
       var keep = userSel.value;
       userSel.replaceChildren(new Option("Pick a student", ""));
       data.users.forEach(function (u) {
-        if (!u.admin) userSel.append(new Option(u.name, u.name));
+        if (!u.admin) userSel.append(new Option(shown(u), u.name));
       });
       userSel.value = keep;
 
@@ -210,7 +236,7 @@
         var p = document.createElement("p");
         p.className = "meta";
         var who = document.createElement("strong");
-        who.textContent = u.name;
+        who.textContent = shown(u);
         p.append(who, " · until " + u.until + " · ",
           linkButton("End now", function (b) {
             b.disabled = true;
@@ -224,7 +250,8 @@
 
   function setTimeoutFor(name, minutes) {
     return api("POST", "/api/admin/timeout", { username: name, minutes: minutes }).then(function (r) {
-      say(r.until ? r.name + " is timed out until " + r.until + "." : r.name + " can use the site again.");
+      say(r.until ? r.adminName + " is timed out until " + r.until + "."
+                  : r.adminName + " can use the site again.");
       return Promise.all([loadUsers(), loadReports()]);
     }).catch(fail);
   }
@@ -240,6 +267,72 @@
     });
   });
 
+  // ---- invites
+
+  var inviteForm = document.getElementById("invite-form");
+  var inviteName = document.getElementById("invite-name");
+  var inviteProper = document.getElementById("invite-proper");
+  var invitesEl = document.getElementById("invites");
+
+  function loadInvites() {
+    return api("GET", "/api/admin/invites").then(function (data) {
+      invitesEl.replaceChildren();
+      if (!data.invites.length) {
+        var none = document.createElement("li");
+        none.className = "empty";
+        none.textContent = "Nobody.";
+        invitesEl.append(none);
+      }
+      data.invites.forEach(function (inv) {
+        var li = document.createElement("li");
+        var p = document.createElement("p");
+        p.className = "meta";
+        var who = document.createElement("strong");
+        who.textContent = inv.adminName;
+        var code = document.createElement("code");
+        code.className = "invite-code";
+        code.textContent = inv.code;
+        p.append(who, " · username " + inv.username + " · code ", code, " · ",
+          linkButton("New code", function (b) {
+            twoStep(b, "Old code stops working. Sure?", function () {
+              api("POST", "/api/admin/invites/" + inv.id + "/new-code").then(function (r) {
+                say("New code for " + inv.adminName + ": " + r.code);
+                return loadInvites();
+              }).catch(fail);
+            });
+          }), " · ",
+          linkButton("Delete", function (b) {
+            twoStep(b, "Really delete?", function () {
+              api("DELETE", "/api/admin/invites/" + inv.id).then(function () {
+                say("Invite for " + inv.adminName + " deleted.");
+                return loadInvites();
+              }).catch(fail);
+            });
+          }));
+        li.append(p);
+        invitesEl.append(li);
+      });
+    });
+  }
+
+  inviteForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var proper = inviteProper.value.trim();
+    var name = inviteName.value.trim();
+    if (!proper) { say("Enter their proper name first."); inviteProper.focus(); return; }
+    if (!name) { say("Pick a username for them."); inviteName.focus(); return; }
+    var button = inviteForm.querySelector("button");
+    button.disabled = true;
+    api("POST", "/api/admin/invites", { properName: proper, username: name }).then(function (r) {
+      say("Invite for " + r.adminName + " (username " + r.username + "): " + r.code +
+          ". Give it to them along with the address of this site.");
+      inviteProper.value = "";
+      inviteName.value = "";
+      inviteProper.focus();
+      return loadInvites();
+    }).catch(fail).then(function () { button.disabled = false; });
+  });
+
   // ---- start
 
   api("GET", "/api/me").then(function (data) {
@@ -247,7 +340,7 @@
       say("Admin tools are for admin accounts only.");
       return;
     }
-    return Promise.all([loadReports(), loadUsers()]).then(function () {
+    return Promise.all([loadReports(), loadUsers(), loadInvites()]).then(function () {
       say("");
       tools.hidden = false;
     });

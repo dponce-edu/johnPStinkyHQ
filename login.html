@@ -8,8 +8,8 @@
 </head>
 <body>
 
-<!-- The one page anyone can see. Everything else on the Pi needs a log-in
-     (see server/Caddyfile). Only styles.css and background.jpg load here. -->
+<!-- Anyone can see this page (and join.html). Everything else on the Pi needs
+     a log-in (see server/Caddyfile and PUBLIC_PATHS in server/app.py). -->
 <div class="wrap">
   <header>
     <h1>Club Escapade</h1>
@@ -26,38 +26,27 @@
       <!-- inputmode="none": on touch screens use the number pad below instead
            of the pop-up keyboard. A real keyboard still types into it. -->
       <input id="pin" class="pin-input" type="password" inputmode="none"
-             autocomplete="current-password" maxlength="6" placeholder="••••••">
+             autocomplete="current-password">
+      <div id="keypad"></div>
 
-      <div class="keypad" role="group" aria-label="Number pad">
-        <button type="button" data-key="1">1</button>
-        <button type="button" data-key="2">2</button>
-        <button type="button" data-key="3">3</button>
-        <button type="button" data-key="4">4</button>
-        <button type="button" data-key="5">5</button>
-        <button type="button" data-key="6">6</button>
-        <button type="button" data-key="7">7</button>
-        <button type="button" data-key="8">8</button>
-        <button type="button" data-key="9">9</button>
-        <button type="button" data-key="clear" class="quiet" aria-label="Clear PIN">Clear</button>
-        <button type="button" data-key="0">0</button>
-        <button type="button" data-key="back" class="quiet" aria-label="Delete last digit">&#9003;</button>
-      </div>
-      <p class="muted auth-note">No account? Ask your teacher for one.</p>
+      <p class="muted auth-note">New here? <a href="join.html">Use your invite code</a>.</p>
     </form>
     <p id="msg" class="muted" role="status" aria-live="polite"></p>
   </main>
 </div>
 
+<script src="pinpad.js"></script>
 <script>
-  // Type a username, then the PIN with the number pad or the keyboard
-  // (digits, Backspace, Esc to clear). The last digit logs in.
-  var PIN_LENGTH = 6; // keep in step with PIN_LENGTH in server/app.py
+  // Type the username (from the teacher), then the PIN with the number pad or the keyboard.
+  // The last digit logs in.
   var form = document.getElementById("login");
   var nameEl = document.getElementById("name");
   var pinEl = document.getElementById("pin");
   var msg = document.getElementById("msg");
-  var keypad = form.querySelector(".keypad");
   var busy = false;
+
+  pinEl.maxLength = PIN_LENGTH;
+  pinEl.placeholder = "•".repeat(PIN_LENGTH);
 
   // Go back to the page that sent us here, but only to a page on this site.
   // Admins headed for the homepage land on the admin tools instead.
@@ -82,36 +71,25 @@
     if (data.user) location.replace(next(data.user));
   }).catch(function () {});
 
-  // Light up the on-screen key a keyboard press matches.
-  function flash(key) {
-    var b = keypad.querySelector('[data-key="' + key + '"]');
-    if (!b) return;
-    b.classList.add("pressed");
-    setTimeout(function () { b.classList.remove("pressed"); }, 120);
-  }
-
-  function setPin(value) {
-    pinEl.value = value.replace(/\D/g, "").slice(0, PIN_LENGTH);
-    if (pinEl.value.length === PIN_LENGTH) submit();
-  }
-
-  function press(key) {
-    if (busy) return;
-    if (key === "clear") setPin("");
-    else if (key === "back") setPin(pinEl.value.slice(0, -1));
-    else setPin(pinEl.value + key);
-  }
+  var pad = PinPad({
+    input: pinEl,
+    keypad: document.getElementById("keypad"),
+    length: PIN_LENGTH,
+    onComplete: submit,
+    onEnter: submit,
+    busy: function () { return busy; }
+  });
 
   function submit() {
     if (busy) return;
     var name = nameEl.value.trim();
     if (!name) {
       msg.textContent = "Type your username first.";
-      pinEl.value = "";
+      pad.clear();
       nameEl.focus();
       return;
     }
-    if (pinEl.value.length !== PIN_LENGTH) {
+    if (pad.value().length !== PIN_LENGTH) {
       msg.textContent = "Your PIN is " + PIN_LENGTH + " digits.";
       return;
     }
@@ -122,56 +100,26 @@
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: name, pin: pinEl.value })
+      body: JSON.stringify({ username: name, pin: pad.value() })
     }).then(json).then(function (data) {
       location.replace(next(data.user));
     }).catch(function (err) {
       msg.textContent = err.message;
       busy = false;
       form.classList.remove("busy");
-      pinEl.value = "";
+      pad.clear();
       form.classList.remove("shake");
       void form.offsetWidth; // restart the animation
       form.classList.add("shake");
-      pinEl.focus();
+      pad.focus();
     });
   }
 
-  keypad.addEventListener("click", function (e) {
-    var b = e.target.closest("button[data-key]");
-    if (b) press(b.dataset.key);
-  });
-
-  // Typing straight into the PIN box: keep digits only.
-  pinEl.addEventListener("input", function () { setPin(pinEl.value); });
-
   // Enter in the username box moves on to the PIN.
   nameEl.addEventListener("keydown", function (e) {
-    if (e.key === "Enter") { e.preventDefault(); pinEl.focus(); }
+    if (e.key === "Enter") { e.preventDefault(); pad.focus(); }
   });
-
   form.addEventListener("submit", function (e) { e.preventDefault(); submit(); });
-
-  // Keyboard anywhere except the username box (which can hold digits too):
-  // digits, Backspace and Esc work the number pad, and Enter logs in.
-  document.addEventListener("keydown", function (e) {
-    if (e.target === nameEl || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.key === "Enter") { // no submit button, so the form won't do this itself
-      e.preventDefault();
-      submit();
-      return;
-    }
-    var key = /^[0-9]$/.test(e.key) ? e.key
-            : e.key === "Backspace" ? "back"
-            : e.key === "Escape" ? "clear"
-            : null;
-    if (!key) return;
-    flash(key);
-    if (e.target === pinEl && key !== "clear") return; // the box handles its own typing
-    e.preventDefault();
-    press(key);
-    pinEl.focus();
-  });
 </script>
 </body>
 </html>

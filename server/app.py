@@ -45,7 +45,7 @@ MAX_SAVE_KEY = 300                      # one save's name
 MAX_SAVE_VALUE = 512 * 1024             # one save
 MAX_SAVES_TOTAL = 10 * 1024 * 1024      # everything one user has saved
 USERNAME_RE = re.compile(r"[A-Za-z0-9_-]{3,20}")
-PIN_LENGTH = 6  # log-ins use a 6-digit PIN; keep in step with PIN_LENGTH in login.html
+PIN_LENGTH = 6  # log-ins use a 6-digit PIN; keep in step with PIN_LENGTH in pinpad.js
 PIN_RE = re.compile(r"[0-9]{%d}" % PIN_LENGTH)
 # Wrong-PIN limits, per 15 minutes. A short PIN is only safe because guesses
 # are slow: 5 per account means years to try all 6-digit PINs. The per-address
@@ -68,7 +68,10 @@ CREATE TABLE IF NOT EXISTS users (
     created   INTEGER NOT NULL,
     is_admin  INTEGER NOT NULL DEFAULT 0,
     banned    INTEGER NOT NULL DEFAULT 0,
-    timeout_until INTEGER NOT NULL DEFAULT 0  -- can't use the site until then
+    timeout_until INTEGER NOT NULL DEFAULT 0, -- can't use the site until then
+    screen_name TEXT,                          -- what others see; NULL: the username
+    proper_name TEXT NOT NULL DEFAULT '',      -- legal/formal name; admins only
+    invite_code TEXT                           -- set until the student joins
 );
 CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY,
@@ -125,8 +128,89 @@ def init_db():
     columns = [r["name"] for r in con.execute("PRAGMA table_info(users)")]
     if "timeout_until" not in columns:
         con.execute("ALTER TABLE users ADD COLUMN timeout_until INTEGER NOT NULL DEFAULT 0")
+    if "screen_name" not in columns:
+        con.execute("ALTER TABLE users ADD COLUMN screen_name TEXT")
+    if "invite_code" not in columns:
+        con.execute("ALTER TABLE users ADD COLUMN invite_code TEXT")
+    if "proper_name" not in columns:
+        con.execute("ALTER TABLE users ADD COLUMN proper_name TEXT NOT NULL DEFAULT ''")
+    con.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_by_invite ON users(invite_code)")
+    con.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_by_screen_name "
+                "ON users(screen_name COLLATE NOCASE)")
     con.commit()
     con.close()
+
+
+# ---------------------------------------------------------------- invites
+# An admin makes an account with a username (what the student logs in with)
+# and gets an invite code. The student enters the code on join.html and picks
+# a screen name (what everyone else sees) and their own PIN. Until then the
+# account has no PIN, so nobody can log in to it.
+
+INVITE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no 0/O, 1/I/L
+
+
+def new_invite_code(con):
+    while True:
+        code = "".join(secrets.choice(INVITE_CHARS) for _ in range(8))
+        if not con.execute("SELECT 1 FROM users WHERE invite_code = ?", (code,)).fetchone():
+            return code
+
+
+def show_code(code):
+    return code[:4] + "-" + code[4:]
+
+
+def clean_code(text):
+    """What someone typed -> stored form: 'k7mp 3xqa' -> 'K7MP3XQA'."""
+    return re.sub(r"[^A-Z0-9]", "", str(text).upper())
+
+
+def username_problem(con, name):
+    """Why an admin can't use this username, or None."""
+    if not isinstance(name, str) or not USERNAME_RE.fullmatch(name):
+        return "Usernames are 3-20 letters, numbers, - or _."
+    if con.execute("SELECT 1 FROM users WHERE username = ?", (name,)).fetchone():
+        return "There's already a user called %s." % name
+    if con.execute("SELECT 1 FROM users WHERE screen_name = ? COLLATE NOCASE", (name,)).fetchone():
+        return "Someone already uses %s as their screen name." % name
+    return None
+
+
+MAX_PROPER_NAME = 100
+
+
+def clean_proper_name(text):
+    """A person's name as written in legal and formal contexts. Only admins
+    ever see it. Any characters (accents, apostrophes, hyphens) are fine."""
+    return " ".join(str(text or "").split())
+
+
+def proper_name_problem(name):
+    if not name:
+        return "Enter their proper name (as written in legal and formal contexts)."
+    if len(name) > MAX_PROPER_NAME:
+        return "Proper names can be up to %d characters." % MAX_PROPER_NAME
+    return None
+
+
+def create_invite(con, username, proper_name, admin=False):
+    code = new_invite_code(con)
+    cur = con.execute(
+        "INSERT INTO users (username, password, created, is_admin, invite_code, proper_name) "
+        "VALUES (?, '', ?, ?, ?, ?)",
+        (username, int(time.time()), 1 if admin else 0, code, proper_name))
+    return cur.lastrowid, code
+
+
+def shown_name(row):
+    """The name other people see."""
+    return row["screen_name"] or row["username"]
+
+
+def admin_name(row):
+    """How the admin tools refer to someone: their proper name if known."""
+    return row["proper_name"] or row["username"]
 
 
 # Timeout lengths offered on the admin page, in minutes (up to a week).
@@ -355,6 +439,13 @@ ROUTES = [
     ("POST", r"/api/admin/comments/(\d+)/clear-reports", "admin_clear_reports"),
     ("GET", r"/api/admin/users", "admin_users"),
     ("POST", r"/api/admin/timeout", "admin_timeout"),
+    ("GET", r"/api/admin/invites", "admin_invites"),
+    ("POST", r"/api/admin/invites", "admin_add_invite"),
+    ("POST", r"/api/admin/invites/(\d+)/new-code", "admin_new_code"),
+    ("DELETE", r"/api/admin/invites/(\d+)", "admin_delete_invite"),
+    # Joining with an invite code (join.html), before anyone is logged in.
+    ("POST", r"/api/invite/check", "invite_check"),
+    ("POST", r"/api/invite/join", "invite_join"),
 ]
 
 # Never served by --dev, even though they sit in the site folder.
@@ -362,7 +453,7 @@ PRIVATE_PREFIXES = ("/server", "/data", "/.git", "/.gitignore")
 
 # The only files anyone can load without logging in: the log-in page and what
 # it needs. In production Caddy asks /api/auth-check about every request.
-PUBLIC_PATHS = ("/login.html", "/styles.css", "/background.jpg")
+PUBLIC_PATHS = ("/login.html", "/join.html", "/pinpad.js", "/styles.css", "/background.jpg")
 
 
 def clean_path(path):
@@ -605,6 +696,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         need(LIMITS.allowed(user_key, PIN_FAILS_PER_USER, 900), 429,
              "Too many wrong PINs for this name. Wait 15 minutes, or ask your teacher.")
         user = con.execute("SELECT * FROM users WHERE username = ?", (name.strip(),)).fetchone()
+        need(not (user and user["invite_code"]), 403,
+             "This account isn't set up yet. Use your invite code on the Join page.")
         ok = check_password(pin, user["password"] if user else DUMMY_HASH)
         if not (user and ok):
             LIMITS.add(ip_key)
@@ -614,6 +707,61 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         need(user["timeout_until"] <= time.time(), 403,
              "You're in a timeout until %s." % until_text(user["timeout_until"]))
         self.start_session(con, user["id"])
+        return 200, {"user": public_user(user)}
+
+    # -- API: joining with an invite code
+
+    def find_invite(self, con, code):
+        """The pending account for a code. Wrong guesses are rate limited."""
+        fail_key = "invitefail:" + self.client_ip()
+        need(LIMITS.allowed(fail_key, 50, 900), 429,
+             "Too many wrong codes from here. Wait 15 minutes and try again.")
+        code = clean_code(code or "")
+        user = con.execute("SELECT * FROM users WHERE invite_code = ?",
+                           (code,)).fetchone() if len(code) == 8 else None
+        if user is None:
+            LIMITS.add(fail_key)
+            raise ApiError(404, "That code doesn't work. Check it and try again.")
+        return user
+
+    def check_screen_name(self, con, name, user_id):
+        need(isinstance(name, str) and USERNAME_RE.fullmatch(name), 400,
+             "Screen names are 3-20 letters, numbers, - or _ (no spaces).")
+        need(not has_blocked_word(name), 400, "That screen name isn't allowed. Try another.")
+        # No one may look like someone else: not another screen name, and not
+        # another account's username while that account shows its username.
+        taken = con.execute(
+            "SELECT 1 FROM users WHERE id != ? AND (screen_name = ? COLLATE NOCASE "
+            "OR (screen_name IS NULL AND invite_code IS NULL AND username = ?))",
+            (user_id, name, name)).fetchone()
+        need(taken is None, 409, "Someone already has that screen name. Try another.")
+
+    def api_invite_check(self, con):
+        """Body: {"code"} or {"code", "screenName"}: checks before the PIN step."""
+        data = self.json_body()
+        user = self.find_invite(con, data.get("code"))
+        if "screenName" in data:
+            self.check_screen_name(con, data.get("screenName"), user["id"])
+        return 200, {"username": user["username"]}
+
+    def api_invite_join(self, con):
+        """Body: {"code", "screenName", "pin"}. Sets up the account and logs in."""
+        data = self.json_body()
+        user = self.find_invite(con, data.get("code"))
+        name, pin = data.get("screenName"), data.get("pin")
+        self.check_screen_name(con, name, user["id"])
+        need(isinstance(pin, str) and PIN_RE.fullmatch(pin), 400,
+             "Your PIN needs to be %d digits." % PIN_LENGTH)
+        try:
+            cur = con.execute(
+                "UPDATE users SET screen_name = ?, password = ?, invite_code = NULL "
+                "WHERE id = ? AND invite_code = ?",
+                (name, hash_password(pin), user["id"], user["invite_code"]))
+        except sqlite3.IntegrityError:
+            raise ApiError(409, "Someone already has that screen name. Try another.")
+        need(cur.rowcount == 1, 409, "That code was just used. Ask your teacher.")
+        self.start_session(con, user["id"])
+        user = con.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
         return 200, {"user": public_user(user)}
 
     def api_logout(self, con):
@@ -632,7 +780,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.check_game(game)
         user = self.require_user(con, "Log in first.")
         rows = con.execute(
-            "SELECT c.id, c.body, c.created, c.user_id, u.username, "
+            "SELECT c.id, c.body, c.created, c.user_id, u.username, u.screen_name, "
             "(SELECT COUNT(*) FROM reports r WHERE r.comment_id = c.id) AS reports, "
             "EXISTS (SELECT 1 FROM reports r WHERE r.comment_id = c.id AND r.user_id = ?) AS mine "
             "FROM comments c JOIN users u ON u.id = c.user_id "
@@ -643,7 +791,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             own = bool(user and user["id"] == r["user_id"])
             c = {
                 "id": r["id"],
-                "user": r["username"],
+                "user": shown_name(r),
                 "body": r["body"],
                 "created": r["created"],
                 "canDelete": bool(own or (user and user["is_admin"])),
@@ -677,7 +825,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         cur = con.execute(
             "INSERT INTO comments (game, user_id, body, created) VALUES (?, ?, ?, ?)",
             (game, user["id"], body, now))
-        return 201, {"comment": {"id": cur.lastrowid, "user": user["username"],
+        return 201, {"comment": {"id": cur.lastrowid, "user": shown_name(user),
                                  "body": body, "created": now, "canDelete": True}}
 
     def api_rate(self, con, game):
@@ -722,14 +870,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def api_admin_reports(self, con):
         self.require_admin(con)
         rows = con.execute(
-            "SELECT c.id, c.game, c.body, c.created, u.username, u.banned, "
-            "u.timeout_until, COUNT(r.user_id) AS reports, MAX(r.created) AS last_report "
+            "SELECT c.id, c.game, c.body, c.created, u.username, u.screen_name, u.proper_name, "
+            "u.banned, u.timeout_until, COUNT(r.user_id) AS reports, MAX(r.created) AS last_report "
             "FROM comments c JOIN users u ON u.id = c.user_id "
             "JOIN reports r ON r.comment_id = c.id "
             "GROUP BY c.id ORDER BY reports DESC, last_report DESC").fetchall()
         now = time.time()
         return 200, {"comments": [{
-            "id": r["id"], "game": r["game"], "user": r["username"], "body": r["body"],
+            "id": r["id"], "game": r["game"], "user": shown_name(r), "username": r["username"],
+            "adminName": admin_name(r),
+            "body": r["body"],
             "created": r["created"], "reports": r["reports"], "lastReport": r["last_report"],
             "banned": bool(r["banned"]),
             "timeoutUntil": r["timeout_until"] if r["timeout_until"] > now else None,
@@ -744,10 +894,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.require_admin(con)
         now = time.time()
         return 200, {"choices": TIMEOUT_CHOICES, "users": [{
-            "name": u["username"], "admin": bool(u["is_admin"]), "banned": bool(u["banned"]),
+            "name": u["username"], "screenName": u["screen_name"],
+            "properName": u["proper_name"], "adminName": admin_name(u),
+            "admin": bool(u["is_admin"]), "banned": bool(u["banned"]),
             "timeoutUntil": u["timeout_until"] if u["timeout_until"] > now else None,
             "until": until_text(u["timeout_until"]) if u["timeout_until"] > now else None,
-        } for u in con.execute("SELECT * FROM users ORDER BY username COLLATE NOCASE")]}
+        } for u in con.execute("SELECT * FROM users WHERE invite_code IS NULL ORDER BY "
+                               "COALESCE(NULLIF(proper_name, ''), username) COLLATE NOCASE")]}
 
     def api_admin_timeout(self, con):
         """Body: {"username": NAME, "minutes": N}. 0 minutes ends a timeout."""
@@ -757,12 +910,56 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         need(isinstance(name, str) and isinstance(minutes, int)
              and 0 <= minutes <= MAX_TIMEOUT_MINUTES, 400, "Pick a student and a length.")
         user = con.execute("SELECT * FROM users WHERE username = ?", (name,)).fetchone()
-        need(user is not None, 404, "No student called %s." % name)
+        need(user is not None and user["invite_code"] is None, 404,
+             "No student called %s." % name)
         need(user["id"] != admin["id"], 400, "You can't time yourself out.")
         need(not user["is_admin"], 400, "Admins can't be timed out.")
         until = set_timeout(con, user["id"], minutes)
-        return 200, {"name": user["username"], "timeoutUntil": until or None,
+        return 200, {"name": user["username"], "adminName": admin_name(user),
+                     "timeoutUntil": until or None,
                      "until": until_text(until) if until else None}
+
+    def api_admin_invites(self, con):
+        self.require_admin(con)
+        rows = con.execute("SELECT id, username, proper_name, invite_code, created FROM users "
+                           "WHERE invite_code IS NOT NULL ORDER BY id DESC")
+        return 200, {"invites": [{"id": r["id"], "username": r["username"],
+                                  "adminName": admin_name(r),
+                                  "code": show_code(r["invite_code"]), "created": r["created"]}
+                                 for r in rows]}
+
+    def api_admin_add_invite(self, con):
+        self.require_admin(con)
+        data = self.json_body()
+        proper = clean_proper_name(data.get("properName"))
+        problem = proper_name_problem(proper)
+        need(problem is None, 400, problem)
+        name = data.get("username") or ""
+        name = name.strip() if isinstance(name, str) else name
+        problem = username_problem(con, name)
+        need(problem is None, 400, problem)
+        user_id, code = create_invite(con, name, proper)
+        return 201, {"id": user_id, "username": name, "adminName": proper,
+                     "code": show_code(code)}
+
+    def pending_invite(self, con, user_id):
+        row = con.execute("SELECT * FROM users WHERE id = ? AND invite_code IS NOT NULL",
+                          (int(user_id),)).fetchone()
+        need(row is not None, 404, "That invite was already used or deleted.")
+        return row
+
+    def api_admin_new_code(self, con, user_id):
+        self.require_admin(con)
+        row = self.pending_invite(con, user_id)
+        code = new_invite_code(con)
+        con.execute("UPDATE users SET invite_code = ? WHERE id = ?", (code, row["id"]))
+        return 200, {"id": row["id"], "adminName": admin_name(row), "code": show_code(code)}
+
+    def api_admin_delete_invite(self, con, user_id):
+        self.require_admin(con)
+        row = self.pending_invite(con, user_id)
+        con.execute("DELETE FROM users WHERE id = ?", (row["id"],))
+        return 200, {"deleted": row["id"]}
 
     # -- API: Flash game saves
 
@@ -817,7 +1014,7 @@ def token_hash(token):
 def public_user(row):
     if row is None:
         return None
-    return {"name": row["username"], "admin": bool(row["is_admin"])}
+    return {"name": shown_name(row), "username": row["username"], "admin": bool(row["is_admin"])}
 
 
 def rating_summary(con, game, user):
@@ -886,21 +1083,65 @@ def cmd_add_user(args):
     init_db()
     con = connect()
     name = args.username
-    if not USERNAME_RE.fullmatch(name):
-        sys.exit("Usernames are 3-20 letters, numbers, - or _.")
-    if con.execute("SELECT 1 FROM users WHERE username = ?", (name,)).fetchone():
-        sys.exit("There's already a user called %r." % name)
+    problem = username_problem(con, name)
+    if problem:
+        sys.exit(problem)
     if has_blocked_word(name) and not args.force:
         sys.exit("%r has a word from blocked-words.txt. Add --force to use it anyway." % name)
     pin = pick_pin(args, name)
-    con.execute("INSERT INTO users (username, password, created, is_admin) VALUES (?, ?, ?, ?)",
-                (name, hash_password(pin), int(time.time()), 1 if args.admin else 0))
+    proper = clean_proper_name(args.proper_name)
+    if len(proper) > MAX_PROPER_NAME:
+        sys.exit("Proper names can be up to %d characters." % MAX_PROPER_NAME)
+    con.execute("INSERT INTO users (username, password, created, is_admin, proper_name) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (name, hash_password(pin), int(time.time()), 1 if args.admin else 0, proper))
     con.commit()
     kind = "Admin" if args.admin else "User"
     if args.choose:
         print("%s %s added." % (kind, name))
     else:
         print("%s %s added. PIN:  %s" % (kind, name, pin))
+
+
+def cmd_invite(args):
+    init_db()
+    con = connect()
+    problem = username_problem(con, args.username)
+    proper = clean_proper_name(args.proper_name)
+    problem = problem or proper_name_problem(proper)
+    if problem:
+        sys.exit(problem)
+    _, code = create_invite(con, args.username, proper, admin=args.admin)
+    con.commit()
+    print("Invite for %s (%s):  %s" % (proper, args.username, show_code(code)))
+    print("They enter it on the Join page (join.html), pick a screen name and a PIN,")
+    print("then log in with the username %s and that PIN." % args.username)
+
+
+def cmd_set_proper_name(args):
+    init_db()
+    con = connect()
+    user = find_user(con, args.username)
+    proper = clean_proper_name(args.proper_name)
+    problem = proper_name_problem(proper)
+    if problem:
+        sys.exit(problem)
+    con.execute("UPDATE users SET proper_name = ? WHERE id = ?", (proper, user["id"]))
+    con.commit()
+    print("%s's proper name is now %s." % (user["username"], proper))
+
+
+def cmd_list_invites(args):
+    init_db()
+    con = connect()
+    rows = con.execute("SELECT * FROM users WHERE invite_code IS NOT NULL ORDER BY id").fetchall()
+    if not rows:
+        print("No unused invites.")
+    for r in rows:
+        print("%s  %s  %-20s %s%s" % (show_code(r["invite_code"]),
+                                      time.strftime("%Y-%m-%d", time.localtime(r["created"])),
+                                      r["username"], r["proper_name"],
+                                      "  (admin)" if r["is_admin"] else ""))
 
 
 def cmd_reset_pin(args):
@@ -954,7 +1195,7 @@ def cmd_list_comments(args):
         params.append(find_user(con, args.user)["id"])
     if args.reported:
         where.append("reports > 0")
-    sql = ("SELECT c.id, c.game, c.body, c.created, u.username, u.banned, "
+    sql = ("SELECT c.id, c.game, c.body, c.created, u.username, u.screen_name, u.banned, "
            "(SELECT COUNT(*) FROM reports r WHERE r.comment_id = c.id) AS reports "
            "FROM comments c JOIN users u ON u.id = c.user_id")
     if where:
@@ -969,7 +1210,7 @@ def cmd_list_comments(args):
             body = body[:69] + "…"
         print("%5d  %s  %-20s %-20s %s%s%s" % (
             r["id"], time.strftime("%Y-%m-%d %H:%M", time.localtime(r["created"])),
-            r["game"][:20], r["username"],
+            r["game"][:20], (r["username"] if not r["screen_name"] else "%s (%s)" % (r["screen_name"], r["username"]))[:20],
             "[%d report%s] " % (r["reports"], "" if r["reports"] == 1 else "s") if r["reports"] else "",
             "(banned) " if r["banned"] else "", body))
 
@@ -1001,8 +1242,12 @@ def cmd_timeout(args):
 def cmd_list_users(args):
     init_db()
     con = connect()
-    for u in con.execute("SELECT * FROM users ORDER BY id"):
+    for u in con.execute("SELECT * FROM users WHERE invite_code IS NULL ORDER BY id"):
         flags = [f for f, on in (("admin", u["is_admin"]), ("banned", u["banned"])) if on]
+        if u["screen_name"]:
+            flags.insert(0, "shows as %s" % u["screen_name"])
+        if u["proper_name"]:
+            flags.insert(0, u["proper_name"])
         if u["timeout_until"] > time.time():
             flags.append("timeout until " + until_text(u["timeout_until"]))
         print("%4d  %-20s %s  %s" % (u["id"], u["username"],
@@ -1033,6 +1278,15 @@ def main():
                     help="type the PIN yourself instead of getting a random one")
     au.add_argument("--admin", action="store_true", help="make the account an admin")
     au.add_argument("--force", action="store_true", help="allow a name the word filter blocks")
+    au.add_argument("--proper-name", help="their name as in legal and formal contexts")
+    iv = sub.add_parser("invite", help="make an account and print its invite code")
+    iv.add_argument("username", help="what they'll log in with (they pick their screen name)")
+    iv.add_argument("proper_name", help='their name as in legal and formal contexts, in quotes')
+    iv.add_argument("--admin", action="store_true", help="the account will be an admin")
+    sub.add_parser("list-invites", help="show invite codes nobody has used yet")
+    sp = sub.add_parser("set-proper-name", help="record someone's legal/formal name")
+    sp.add_argument("username")
+    sp.add_argument("proper_name", help="in quotes, e.g. \"Jamie Rivera\"")
     cs = sub.add_parser("clear-saves", help="delete a user's game saves")
     cs.add_argument("username")
     cs.add_argument("--game", help="only this game id, e.g. red-ball")
@@ -1066,6 +1320,12 @@ def main():
         cmd_set_flag(args, "banned", 1, "%s is banned and logged out.")
     elif args.command == "unban":
         cmd_set_flag(args, "banned", 0, "%s is unbanned.")
+    elif args.command == "invite":
+        cmd_invite(args)
+    elif args.command == "list-invites":
+        cmd_list_invites(args)
+    elif args.command == "set-proper-name":
+        cmd_set_proper_name(args)
     elif args.command == "add-user":
         cmd_add_user(args)
     elif args.command == "clear-saves":

@@ -67,10 +67,10 @@ which git ignores.
    on the site with the PIN it prints:
    ```sh
    sudo -u clubescapade python3 /srv/club-escapade/site/server/app.py \
-     --db /var/lib/club-escapade/club.db add-user YOURNAME --admin
+     --db /var/lib/club-escapade/club.db add-user YOURNAME --admin --proper-name "Your Name"
    ```
-   There's no sign-up on the site. You create every account with `add-user`
-   (see below).
+   There's no sign-up on the site. Students join with an invite code you make
+   (see **Accounts and invites** below).
 
 ### Keep the database on a USB drive (recommended)
 
@@ -84,8 +84,11 @@ Run these with `sudo -u clubescapade python3 /srv/club-escapade/site/server/app.
 
 | Command | Does |
 |---|---|
-| `add-user NAME` | Creates an account and prints a random 6-digit PIN to give the student. Add `--choose` to type one yourself, `--admin` for an admin |
-| `list-users` | Shows every account |
+| `invite USERNAME "Proper Name"` | Makes a student account and prints its invite code (see below). Add `--admin` for an admin |
+| `list-invites` | Shows invite codes nobody has used yet |
+| `set-proper-name USERNAME "Proper Name"` | Records or fixes someone's proper name |
+| `add-user NAME` | Makes a ready-to-use account with a random 6-digit PIN, skipping the invite. Add `--proper-name "..."`, `--choose` to type the PIN, `--admin` for an admin |
+| `list-users` | Shows every account with its proper name and screen name |
 | `make-admin NAME` / `remove-admin NAME` | Admins can delete anyone's comment |
 | `timeout NAME MINUTES` / `end-timeout NAME` | Logs them out and keeps them off the site for that long (up to 10080, a week) |
 | `ban NAME` / `unban NAME` | Banning logs them out and hides their comments and ratings |
@@ -95,11 +98,32 @@ Run these with `sudo -u clubescapade python3 /srv/club-escapade/site/server/app.
 | `clear-reports ID` | Keeps a reported comment and drops its reports |
 | `clear-saves NAME` | Deletes all of someone's game saves. Add `--game ID` for just one game |
 
-**Admin tools page:** admins get an "Admin tools" link on the homepage
-(`admin.html`). It lists reported comments, most-reported first, with buttons
-to delete one, dismiss its reports, or time out its author. It also has a
-form to time out any student for 15 minutes, 1 hour, 1 day or 1 week, and a
-list of current timeouts with "End now". A timed-out student is logged out at
+**Accounts and invites:** every account has three names.
+
+- **Proper name:** their name as written in legal and formal contexts. You
+  enter it, and only admins ever see it. The admin tools page refers to
+  everyone by it.
+- **Username:** you pick it, and they log in with it.
+- **Screen name:** they pick it when joining, and it's what everyone else
+  sees, e.g. on comments. It must be unique, passes the word filter, and
+  can't be changed later.
+
+To add a student, use "Invite a student" on the admin tools page, or
+`invite USERNAME "Proper Name"` on the Pi. Either gives you a code like
+`K7MP-3XQA`. The student opens the Join page (linked from the log-in page,
+or `join.html?code=K7MP-3XQA`), enters the code, picks a screen name, and
+picks a 6-digit PIN twice. Then they're logged in, and the code stops working.
+Students can't reset their own PIN. Use `reset-pin USERNAME` and give them the
+new one. Codes are 8 letters and numbers. Wrong guesses are limited to 50 per
+15 minutes per IP address.
+
+**Admin tools page:** admins land on it after logging in, and there's an
+"Admin tools" link on the homepage (`admin.html`). It lists reported
+comments, most-reported first, with buttons to delete one, dismiss its
+reports, or time out its author. You can invite students and see the invites
+nobody has used yet ("New code" replaces a lost one, and "Delete" removes the
+account). There's a form to time out any student for 15 minutes, 1 hour,
+1 day or 1 week, and a list of current timeouts with "End now". A timed-out student is logged out at
 once. If they try to log in, they see when the timeout ends, in the Pi's time
 zone (set it with `sudo raspi-config` → Localisation if the times look off).
 Their comments stay up. Admins can't be timed out.
@@ -136,7 +160,8 @@ upload wins.
 message. Edit the list in the repo, push, and `git pull` on the Pi. The
 server picks up the change without a restart. The notes at the top of the
 file explain the `word`, `word*`, `*word*` and `=word` forms. The filter only
-checks new comments. `add-user` also warns you if a name has a blocked word.
+checks new comments and the screen names students pick. `add-user` also warns
+you if a username has a blocked word.
 Clean up older comments with
 `delete-comment` or `ban`.
 

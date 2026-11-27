@@ -12,6 +12,8 @@
 }
 
 * { box-sizing: border-box; }
+/* "hidden" always hides, even on things a rule below gives display: grid/flex. */
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 
 /* Tiled star image drifting diagonally (down and to the right) behind the page.
@@ -329,6 +331,23 @@ button:disabled { opacity: .5; cursor: progress; }
   justify-content: center;
 }
 .timeout-form select { min-width: 9rem; }
+.invite-form {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: .5rem .75rem;
+  align-items: center;
+  max-width: 26rem;
+  margin: 0 auto;
+  text-align: left;
+}
+.invite-form button { grid-column: 2; justify-self: start; }
+.invite-code { color: var(--ink); font-weight: 600; letter-spacing: .08em; }
+
+/* ---------- Join with an invite code (join.html) ---------- */
+.code-input { font-size: 1.6rem; text-align: center; letter-spacing: .15em; text-transform: uppercase; }
+.pin-login .hint { margin: 0; font-size: .9rem; }
+.pin-login .hint strong { color: var(--ink); }
+.pin-login > button { margin-top: .25rem; }
 .comments .body { margin-top: .3rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .card .rating { color: var(--ink); font-size: .9rem; margin-top: .3rem; }
