@@ -39,6 +39,11 @@ COOKIE = "ce_session"
 SESSION_SECONDS = 30 * 24 * 3600
 MAX_BODY = 4096
 MAX_COMMENT = 1000
+# Flash game saves (see saves.js). A typical save is a few KB.
+MAX_SAVES_BODY = 2 * 1024 * 1024        # one upload
+MAX_SAVE_KEY = 300                      # one save's name
+MAX_SAVE_VALUE = 512 * 1024             # one save
+MAX_SAVES_TOTAL = 10 * 1024 * 1024      # everything one user has saved
 USERNAME_RE = re.compile(r"[A-Za-z0-9_-]{3,20}")
 GAME_ID = r"([a-z0-9-]{1,64})"
 
@@ -76,6 +81,13 @@ CREATE TABLE IF NOT EXISTS ratings (
     stars    INTEGER NOT NULL CHECK (stars BETWEEN 1 AND 5),
     updated  INTEGER NOT NULL,
     PRIMARY KEY (game, user_id)
+);
+CREATE TABLE IF NOT EXISTS saves (
+    user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    key      TEXT NOT NULL,
+    value    TEXT NOT NULL,
+    updated  INTEGER NOT NULL,
+    PRIMARY KEY (user_id, key)
 );
 CREATE TABLE IF NOT EXISTS reports (
     comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
@@ -301,6 +313,8 @@ ROUTES = [
     ("PUT", r"/api/games/" + GAME_ID + r"/rating", "rate"),
     ("DELETE", r"/api/comments/(\d+)", "delete_comment"),
     ("POST", r"/api/comments/(\d+)/report", "report_comment"),
+    ("GET", r"/api/saves", "saves"),
+    ("POST", r"/api/saves", "update_saves"),
 ]
 
 # Never served by --dev, even though they sit in the site folder.
@@ -429,12 +443,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             need(urlsplit(origin).netloc == self.headers.get("Host", ""),
                  403, "Requests from other sites aren't allowed.")
 
-    def json_body(self):
+    def json_body(self, max_bytes=MAX_BODY):
         try:
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             length = -1
-        need(0 <= length <= MAX_BODY, 413, "Request too large.")
+        need(0 <= length <= max_bytes, 413, "Request too large.")
         raw = self.rfile.read(length) if length else b"{}"
         try:
             data = json.loads(raw.decode("utf-8"))
@@ -642,6 +656,38 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     "VALUES (?, ?, ?)", (int(comment_id), user["id"], int(time.time())))
         return 200, {"reported": int(comment_id)}
 
+    # -- API: Flash game saves
+
+    def api_saves(self, con):
+        user = self.require_user(con, "Log in first.")
+        rows = con.execute("SELECT key, value FROM saves WHERE user_id = ?", (user["id"],))
+        return 200, {"user": user["username"], "saves": {r["key"]: r["value"] for r in rows}}
+
+    def api_update_saves(self, con):
+        """Body: {"put": {key: base64 value, ...}, "delete": [key, ...]}"""
+        user = self.require_user(con, "Log in first.")
+        need(LIMITS.take("saves:" + str(user["id"]), 120, 60), 429, "Saving too often.")
+        data = self.json_body(MAX_SAVES_BODY)
+        put, delete = data.get("put", {}), data.get("delete", [])
+        need(isinstance(put, dict) and isinstance(delete, list), 400, "Bad save data.")
+        for key, value in put.items():
+            need(0 < len(key) <= MAX_SAVE_KEY and isinstance(value, str)
+                 and len(value) <= MAX_SAVE_VALUE, 400, "A save is too big.")
+        need(all(isinstance(k, str) for k in delete), 400, "Bad save data.")
+        now = int(time.time())
+        for key in delete:
+            con.execute("DELETE FROM saves WHERE user_id = ? AND key = ?", (user["id"], key))
+        for key, value in put.items():
+            con.execute("INSERT INTO saves (user_id, key, value, updated) VALUES (?, ?, ?, ?) "
+                        "ON CONFLICT (user_id, key) DO UPDATE SET value = excluded.value, "
+                        "updated = excluded.updated", (user["id"], key, value, now))
+        total = con.execute("SELECT COALESCE(SUM(LENGTH(key) + LENGTH(value)), 0) FROM saves "
+                            "WHERE user_id = ?", (user["id"],)).fetchone()[0]
+        if total > MAX_SAVES_TOTAL:
+            con.rollback()
+            raise ApiError(413, "Your saves are full. Ask your teacher to clear some.")
+        return 200, {"saved": len(put), "deleted": len(delete)}
+
     def api_all_ratings(self, con):
         self.require_user(con, "Log in first.")
         rows = con.execute(
@@ -769,6 +815,22 @@ def cmd_reset_password(args):
         print("They've been logged out everywhere. Give it to them in person.")
 
 
+def cmd_clear_saves(args):
+    init_db()
+    con = connect()
+    user = find_user(con, args.username)
+    sql, params = "DELETE FROM saves WHERE user_id = ?", [user["id"]]
+    if args.game:
+        # Ruffle names saves "<site>/<path to .swf>/<name>"; match the .swf part.
+        sql += " AND key LIKE ? ESCAPE '\\'"
+        file = "games/%s.swf/" % args.game
+        params.append("%" + file.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%")
+    cur = con.execute(sql, params)
+    con.commit()
+    print("Deleted %d save%s for %s%s." % (cur.rowcount, "" if cur.rowcount == 1 else "s",
+                                           user["username"], " in " + args.game if args.game else ""))
+
+
 def cmd_delete_comment(args):
     init_db()
     con = connect()
@@ -850,6 +912,9 @@ def main():
                     help="type the password yourself instead of getting a random one")
     au.add_argument("--admin", action="store_true", help="make the account an admin")
     au.add_argument("--force", action="store_true", help="allow a name the word filter blocks")
+    cs = sub.add_parser("clear-saves", help="delete a user's game saves")
+    cs.add_argument("username")
+    cs.add_argument("--game", help="only this game id, e.g. red-ball")
     rp = sub.add_parser("reset-password", help="give a user a new password and log them out")
     rp.add_argument("username")
     rp.add_argument("--choose", action="store_true",
@@ -877,6 +942,8 @@ def main():
         cmd_set_flag(args, "banned", 0, "%s is unbanned.")
     elif args.command == "add-user":
         cmd_add_user(args)
+    elif args.command == "clear-saves":
+        cmd_clear_saves(args)
     elif args.command == "reset-password":
         cmd_reset_password(args)
     elif args.command == "delete-comment":

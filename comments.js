@@ -91,7 +91,14 @@
       out.textContent = "Log out";
       out.addEventListener("click", function () {
         // The whole site needs a log-in, so logging out goes to the log-in page.
-        api("POST", "/api/logout").then(function () {
+        // Close the game first: Ruffle writes its saves as it shuts down, and
+        // they must be uploaded and wiped now, not left for the next person.
+        var game = document.querySelector("ruffle-player");
+        if (game) game.remove();
+        var saves = window.cloudSaves ? cloudSaves.logout() : Promise.resolve();
+        saves.then(function () {
+          return api("POST", "/api/logout");
+        }).then(function () {
           location.href = "login.html";
         }).catch(fail);
       });

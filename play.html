@@ -61,6 +61,7 @@
      https://ruffle.rs/downloads and point this src at the local ruffle.js -->
 <script src="https://unpkg.com/@ruffle-rs/ruffle"></script>
 <script src="games.js"></script>
+<script src="saves.js"></script>
 <script src="comments.js" defer></script>
 <script>
   var stage = document.getElementById("stage");
@@ -89,9 +90,13 @@
     if (player) return player;
     player = window.RufflePlayer.newest().createPlayer();
     // Ruffle reads the stage size from the .swf and fires this once it knows it.
+    var watching = false;
     player.addEventListener("loadedmetadata", function () {
       var m = player.metadata;
       if (m) setRatio(m.width, m.height);
+      // Ruffle's own "write saves on leaving" listener exists by now, so ours
+      // runs after it and uploads what it wrote.
+      if (!watching && window.cloudSaves) { watching = true; cloudSaves.watchLeaving(); }
     });
     stage.appendChild(player);
     return player;
@@ -146,8 +151,13 @@
         var parts = String(game.ratio).split("/");
         setRatio(parseFloat(parts[0]), parseFloat(parts[1] || 1));
       }
-      // encodeURI handles file names with spaces
-      play({ url: encodeURI(game.file) }, game.title);
+      // Fetch this person's saves from the server first, so the game finds them.
+      show("Loading your saves…");
+      var ready = window.cloudSaves ? cloudSaves.start() : Promise.resolve();
+      ready.then(function () {
+        // encodeURI handles file names with spaces
+        play({ url: encodeURI(game.file) }, game.title);
+      });
     } else if (id) {
       show('No game called "' + id.replace(/[<>&"]/g, "") + '". <a href="index.html">See all games</a>');
     } else {

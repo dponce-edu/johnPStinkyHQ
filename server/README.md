@@ -92,6 +92,7 @@ Run these with `sudo -u clubescapade python3 /srv/club-escapade/site/server/app.
 | `delete-comment ID` | Deletes one comment |
 | `reset-password NAME` | Gives them a new random password (like `k7mp-3xqa-9wdh`) and logs them out everywhere. Add `--choose` to type one yourself |
 | `clear-reports ID` | Keeps a reported comment and drops its reports |
+| `clear-saves NAME` | Deletes all of someone's game saves. Add `--game ID` for just one game |
 
 **Reports:** logged-in users can report anyone else's comment, once each. Reported
 comments stay up until you act. Admins see a red "⚑ N reports" on them on the
@@ -110,6 +111,15 @@ cd /srv/club-escapade/site && sudo git pull && sudo systemctl restart club-escap
 Keep the backups on a different drive than the database.
 
 **Logs:** `journalctl -u club-escapade -f`
+
+**Game saves** follow each student's account (`saves.js`). Opening a game
+downloads their saves first. Playing uploads changes every 15 seconds and on
+leaving the page. Logging out uploads what's left and wipes their saves from
+that browser. If a different student logs in on a computer where someone forgot
+to log out, the old saves are wiped first, so nobody plays on someone else's
+progress. Saves made in a browser before this existed are adopted by the first
+student to log in there. If two computers play the same game at once, the last
+upload wins.
 
 **Blocked words:** comments containing a word from
 `server/blocked-words.txt` are turned away with a "please keep it clean"
@@ -130,5 +140,6 @@ Clean up older comments with
 | Failed log-ins | 10 per 15 minutes per IP address |
 | Comments | 1,000 characters; 5 a minute and 50 a day per user |
 | Rating changes | 30 a minute per user |
+| Game saves | 512 KB per save, 10 MB per user in all |
 
 Rate limits are kept in memory and reset when the server restarts.

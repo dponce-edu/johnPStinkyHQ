@@ -25,6 +25,7 @@
 </div>
 
 <script src="games.js"></script>
+<script src="saves.js"></script>
 <script>
   var grid = document.getElementById("grid");
   var games = window.GAMES || [];
@@ -90,11 +91,14 @@
     })
     .catch(function () {});
   document.getElementById("logout").addEventListener("click", function () {
-    fetch("/api/logout", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: "{}"
+    // Take this person's game saves off the browser (they're on the server).
+    (window.cloudSaves ? cloudSaves.logout() : Promise.resolve()).then(function () {
+      return fetch("/api/logout", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: "{}"
+      });
     }).finally(function () { location.href = "login.html"; });
   });
 
