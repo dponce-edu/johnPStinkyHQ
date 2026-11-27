@@ -1,3 +1,7 @@
 .DS_Store
 data/
 __pycache__/
+
+# Game files are copied to the server separately (see server/README.md),
+# not kept in git.
+/games/

@@ -2,6 +2,7 @@
 //
 // To add a game:
 //   1. Put the .swf in the games/ folder, named <id>.swf (e.g. games/red-ball.swf).
+//      games/ isn't in git; copy it to the server with rsync (server/README.md).
 //   2. Add an entry below.
 //
 //   id     short name used in the link (play.html?game=<id>); letters, numbers, dashes
@@ -41,6 +42,18 @@ window.GAMES = [
     blurb: "Blast enemy tanks and upgrade your own."
   },
   {
+    id: "bejeweled-2",
+    title: "Bejeweled 2",
+    file: "games/bejeweled-2.swf",
+    blurb: "Swap gems to line up three or more."
+  },
+  {
+    id: "bejeweled-twist",
+    title: "Bejeweled Twist",
+    file: "games/bejeweled-twist.swf",
+    blurb: "Rotate gems in fours to make matches."
+  },
+  {
     id: "bloxorz",
     title: "Bloxorz",
     file: "games/bloxorz.swf",
@@ -63,6 +76,12 @@ window.GAMES = [
     title: "Cheese Dreams",
     file: "games/cheese-dreams.swf",
     blurb: "Bouncy cheesy and a little platformy."
+  },
+  {
+    id: "cheese-dreams-new-moon",
+    title: "Cheese Dreams: New Moon",
+    file: "games/cheese-dreams-new-moon.swf",
+    blurb: "More bouncy, cheesy platforming."
   },
   {
     id: "cover-orange",
@@ -113,6 +132,18 @@ window.GAMES = [
     blurb: "Two-player puzzle platformer. Fire and water don't mix."
   },
   {
+    id: "fireboy-watergirl-ice-temple",
+    title: "Fireboy & Watergirl: The Ice Temple",
+    file: "games/fireboy-watergirl-ice-temple.swf",
+    blurb: "Two-player puzzle platformer on slippery ice."
+  },
+  {
+    id: "fireboy-watergirl-light-temple",
+    title: "Fireboy & Watergirl: The Light Temple",
+    file: "games/fireboy-watergirl-light-temple.swf",
+    blurb: "Two-player puzzles with mirrors and beams of light."
+  },
+  {
     id: "flip-man",
     title: "Flip Man",
     file: "games/flip-man.swf",
@@ -147,6 +178,12 @@ window.GAMES = [
     title: "My New Room",
     file: "games/my-new-room.swf",
     blurb: "Decorate a room your way."
+  },
+  {
+    id: "n",
+    title: "N",
+    file: "games/n.swf",
+    blurb: "Ninja platformer. Dodge the drones, grab the gold."
   },
   {
     id: "pac-man",
@@ -345,6 +382,12 @@ window.GAMES = [
     title: "Toxic 2",
     file: "games/toxic-2.swf",
     blurb: "That's... a lot of goo."
+  },
+  {
+    id: "ultimate-flash-sonic",
+    title: "Ultimate Flash Sonic",
+    file: "games/ultimate-flash-sonic.swf",
+    blurb: "Gotta go fast!"
   },
   {
     id: "unfair-mario",

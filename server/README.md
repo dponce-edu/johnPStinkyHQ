@@ -41,6 +41,8 @@ which git ignores.
    sudo git clone https://github.com/dponce-edu/johnPStinkyHQ.git /srv/club-escapade/site
    sudo useradd --system --no-create-home --shell /usr/sbin/nologin clubescapade
    ```
+   The game files (`games/*.swf`) aren't in git. Copy them over from your
+   computer (see **Copy the games** below).
 
 4. Start the server, and have it start at boot:
    ```sh
@@ -138,6 +140,16 @@ comment, ban its author, or `clear-reports` if it's fine.
 ```sh
 cd /srv/club-escapade/site && sudo git pull && sudo systemctl restart club-escapade
 ```
+
+**Copy the games.** The `games/` folder isn't in git, so send it from your
+computer whenever you add or change games. Run this in the repo folder on your
+computer (replace `pi@your-pi` with your Pi's SSH login):
+```sh
+rsync -av --delete --rsync-path="sudo rsync" games/ pi@your-pi:/srv/club-escapade/site/games/
+```
+`--delete` removes games from the Pi that you've deleted locally. Don't
+rename a game file once students have played it, because their saves are tied
+to the file name.
 
 **Back up the database** (safe while running). Add a nightly cron job with `sudo crontab -e`:
 ```
