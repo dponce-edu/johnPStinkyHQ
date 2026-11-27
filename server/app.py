@@ -8,12 +8,14 @@ In production Caddy serves the site's files and HTTPS, and passes /api/*
 to this server on 127.0.0.1:8080. See server/README.md.
 
     python3 server/app.py serve --dev      # local testing: site + API on :8080
+    python3 server/app.py add-user NAME    # create an account, prints its password
     python3 server/app.py make-admin NAME  # let NAME delete any comment
     python3 server/app.py ban NAME         # block NAME and hide their posts
     python3 server/app.py --help           # everything else
 """
 
 import argparse
+import getpass
 import hashlib
 import hmac
 import http.cookies
@@ -290,7 +292,6 @@ def need(ok, status, message):
 
 ROUTES = [
     ("GET", r"/api/me", "me"),
-    ("POST", r"/api/signup", "signup"),
     ("POST", r"/api/login", "login"),
     ("POST", r"/api/logout", "logout"),
     ("GET", r"/api/ratings", "all_ratings"),
@@ -480,29 +481,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def api_me(self, con):
         return 200, {"user": public_user(self.current_user(con))}
-
-    def api_signup(self, con):
-        data = self.json_body()
-        name = data.get("username")
-        password = data.get("password")
-        need(isinstance(name, str) and USERNAME_RE.fullmatch(name), 400,
-             "Usernames are 3-20 letters, numbers, - or _.")
-        need(isinstance(password, str) and 8 <= len(password) <= 200, 400,
-             "Passwords need at least 8 characters.")
-        need(not has_blocked_word(name), 400, "That username isn't allowed. Try another.")
-        need(LIMITS.take("signup:" + self.client_ip(), 5, 3600), 429,
-             "Too many new accounts from here. Try again in an hour.")
-        exists = con.execute("SELECT 1 FROM users WHERE username = ?", (name,)).fetchone()
-        need(exists is None, 409, "That username is taken.")
-        try:
-            cur = con.execute(
-                "INSERT INTO users (username, password, created) VALUES (?, ?, ?)",
-                (name, hash_password(password), int(time.time())))
-        except sqlite3.IntegrityError:
-            raise ApiError(409, "That username is taken.")
-        self.start_session(con, cur.lastrowid)
-        user = con.execute("SELECT * FROM users WHERE id = ?", (cur.lastrowid,)).fetchone()
-        return 201, {"user": public_user(user)}
 
     def api_login(self, con):
         data = self.json_body()
@@ -696,6 +674,59 @@ def cmd_set_flag(args, column, value, done):
     print(done % user["username"])
 
 
+# No 0/O, 1/l/I: easy to read off a screen and type on a Chromebook.
+TEMP_PASSWORD_CHARS = "abcdefghjkmnpqrstuvwxyz23456789"
+
+
+def pick_password(args, name):
+    """--choose: type it twice. Otherwise a random one like k7mp-3xqa-9wdh."""
+    if not args.choose:
+        return "-".join("".join(secrets.choice(TEMP_PASSWORD_CHARS) for _ in range(4))
+                        for _ in range(3))
+    password = getpass.getpass("New password for %s: " % name)
+    if not 8 <= len(password) <= 200:
+        sys.exit("Passwords need 8-200 characters. Nothing changed.")
+    if getpass.getpass("Type it again: ") != password:
+        sys.exit("Those didn't match. Nothing changed.")
+    return password
+
+
+def cmd_add_user(args):
+    init_db()
+    con = connect()
+    name = args.username
+    if not USERNAME_RE.fullmatch(name):
+        sys.exit("Usernames are 3-20 letters, numbers, - or _.")
+    if con.execute("SELECT 1 FROM users WHERE username = ?", (name,)).fetchone():
+        sys.exit("There's already a user called %r." % name)
+    if has_blocked_word(name) and not args.force:
+        sys.exit("%r has a word from blocked-words.txt. Add --force to use it anyway." % name)
+    password = pick_password(args, name)
+    con.execute("INSERT INTO users (username, password, created, is_admin) VALUES (?, ?, ?, ?)",
+                (name, hash_password(password), int(time.time()), 1 if args.admin else 0))
+    con.commit()
+    kind = "Admin" if args.admin else "User"
+    if args.choose:
+        print("%s %s added." % (kind, name))
+    else:
+        print("%s %s added. Password:  %s" % (kind, name, password))
+
+
+def cmd_reset_password(args):
+    init_db()
+    con = connect()
+    user = find_user(con, args.username)
+    password = pick_password(args, user["username"])
+    con.execute("UPDATE users SET password = ? WHERE id = ?", (hash_password(password), user["id"]))
+    con.execute("DELETE FROM sessions WHERE user_id = ?", (user["id"],))
+    con.commit()
+    if args.choose:
+        print("Password for %s changed. They've been logged out everywhere." % user["username"])
+    else:
+        print("New password for %s:  %s" % (user["username"], password))
+        print("They've been logged out everywhere. Give it to them in person.")
+
+
 def cmd_delete_comment(args):
     init_db()
     con = connect()
@@ -771,6 +802,16 @@ def main():
                        ("unban", "lift a ban")):
         sub.add_parser(name, help=text).add_argument("username")
     sub.add_parser("delete-comment", help="delete one comment by id").add_argument("id", type=int)
+    au = sub.add_parser("add-user", help="create an account (prints a random password)")
+    au.add_argument("username")
+    au.add_argument("--choose", action="store_true",
+                    help="type the password yourself instead of getting a random one")
+    au.add_argument("--admin", action="store_true", help="make the account an admin")
+    au.add_argument("--force", action="store_true", help="allow a name the word filter blocks")
+    rp = sub.add_parser("reset-password", help="give a user a new password and log them out")
+    rp.add_argument("username")
+    rp.add_argument("--choose", action="store_true",
+                    help="type the new password yourself instead of getting a random one")
     lc = sub.add_parser("list-comments", help="show recent comments with their ids")
     lc.add_argument("--game", help="only this game id, e.g. red-ball")
     lc.add_argument("--user", help="only this username")
@@ -792,6 +833,10 @@ def main():
         cmd_set_flag(args, "banned", 1, "%s is banned and logged out.")
     elif args.command == "unban":
         cmd_set_flag(args, "banned", 0, "%s is unbanned.")
+    elif args.command == "add-user":
+        cmd_add_user(args)
+    elif args.command == "reset-password":
+        cmd_reset_password(args)
     elif args.command == "delete-comment":
         cmd_delete_comment(args)
     elif args.command == "list-comments":

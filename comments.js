@@ -70,7 +70,7 @@
   el.stars.addEventListener("click", function (e) {
     var b = e.target.closest("button");
     if (!b) return;
-    if (!state.user) { say("Log in or sign up below to rate this game."); return; }
+    if (!state.user) { say("Log in below to rate this game."); return; }
     api("PUT", "/api/games/" + gameId + "/rating", { stars: Number(b.dataset.stars) })
       .then(function (data) { state.rating = data.rating; renderRating(); say(""); }, fail);
   });
@@ -111,12 +111,8 @@
       '<label class="sr-only" for="auth-pass">Password</label>' +
       '<input id="auth-pass" type="password" autocomplete="current-password" placeholder="password" ' +
       'minlength="8" maxlength="200" required>' +
-      '<button type="submit" data-action="login">Log in</button>' +
-      '<button type="submit" data-action="signup" class="quiet">Sign up</button>';
-    var action = "login";
-    form.addEventListener("click", function (e) {
-      if (e.target.dataset && e.target.dataset.action) action = e.target.dataset.action;
-    });
+      '<button type="submit">Log in</button>' +
+      '<p class="muted auth-note">No account? Ask your teacher for one.</p>';
     form.addEventListener("submit", function (e) {
       e.preventDefault();
       var creds = {
@@ -125,15 +121,14 @@
       };
       var buttons = form.querySelectorAll("button");
       buttons.forEach(function (b) { b.disabled = true; });
-      say(action === "signup" ? "Creating your account…" : "Logging in…");
-      api("POST", "/api/" + action, creds).then(function (data) {
-        say(action === "signup" ? "Welcome, " + data.user.name + "!" : "");
+      say("Logging in…");
+      api("POST", "/api/login", creds).then(function (data) {
+        say("");
         setUser(data.user);
         return refresh();
       }).catch(function (err) {
         fail(err);
         buttons.forEach(function (b) { b.disabled = false; });
-        action = "login";
       });
     });
     el.account.append(form);

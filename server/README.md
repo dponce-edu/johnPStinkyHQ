@@ -58,11 +58,14 @@ which git ignores.
    ```
    Visit `https://your-domain`. Caddy gets the certificate on first visit.
 
-7. Sign up on the site, then make yourself an admin so you can delete any comment:
+7. Create your own admin account, so you can delete any comment. Then log in
+   on the site with the password it prints:
    ```sh
    sudo -u clubescapade python3 /srv/club-escapade/site/server/app.py \
-     --db /var/lib/club-escapade/club.db make-admin YOURNAME
+     --db /var/lib/club-escapade/club.db add-user YOURNAME --admin
    ```
+   There's no sign-up on the site. You create every account with `add-user`
+   (see below).
 
 ### Keep the database on a USB drive (recommended)
 
@@ -76,11 +79,13 @@ Run these with `sudo -u clubescapade python3 /srv/club-escapade/site/server/app.
 
 | Command | Does |
 |---|---|
+| `add-user NAME` | Creates an account and prints a random password to give the student. Add `--choose` to type one yourself, `--admin` for an admin |
 | `list-users` | Shows every account |
 | `make-admin NAME` / `remove-admin NAME` | Admins can delete anyone's comment |
 | `ban NAME` / `unban NAME` | Banning logs them out and hides their comments and ratings |
 | `list-comments` | Shows the 20 newest comments with their IDs and report counts. Add `--reported`, `--game ID`, `--user NAME` or `-n 50` to narrow or widen it |
 | `delete-comment ID` | Deletes one comment |
+| `reset-password NAME` | Gives them a new random password (like `k7mp-3xqa-9wdh`) and logs them out everywhere. Add `--choose` to type one yourself |
 | `clear-reports ID` | Keeps a reported comment and drops its reports |
 
 **Reports:** logged-in users can report anyone else's comment, once each. Reported
@@ -101,12 +106,13 @@ Keep the backups on a different drive than the database.
 
 **Logs:** `journalctl -u club-escapade -f`
 
-**Blocked words:** comments and new usernames containing a word from
+**Blocked words:** comments containing a word from
 `server/blocked-words.txt` are turned away with a "please keep it clean"
 message. Edit the list in the repo, push, and `git pull` on the Pi. The
 server picks up the change without a restart. The notes at the top of the
 file explain the `word`, `word*`, `*word*` and `=word` forms. The filter only
-checks new comments and new usernames. Clean up older ones with
+checks new comments. `add-user` also warns you if a name has a blocked word.
+Clean up older comments with
 `delete-comment` or `ban`.
 
 ## Limits built in
@@ -116,7 +122,6 @@ checks new comments and new usernames. Clean up older ones with
 | Usernames | 3–20 letters, numbers, `-` or `_`, case-insensitive |
 | Passwords | 8–200 characters, stored as scrypt hashes |
 | Sessions | 30 days, in an HttpOnly cookie |
-| New accounts | 5 per hour per IP address |
 | Failed log-ins | 10 per 15 minutes per IP address |
 | Comments | 1,000 characters; 5 a minute and 50 a day per user |
 | Rating changes | 30 a minute per user |

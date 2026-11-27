@@ -245,6 +245,7 @@ input:focus-visible, textarea:focus-visible {
   justify-content: center;
 }
 .auth input { flex: 1 1 10rem; min-width: 0; }
+.auth .auth-note { flex-basis: 100%; margin: 0; }
 
 .comment-form textarea { width: 100%; resize: vertical; display: block; }
 .comment-form .controls { margin-top: .5rem; justify-content: space-between; }
