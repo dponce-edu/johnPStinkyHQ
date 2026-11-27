@@ -213,6 +213,13 @@
     var pick = others[Math.floor(Math.random() * others.length)];
     location.href = "play.html?game=" + encodeURIComponent(pick.id);
   });
+  // Admins don't get the button.
+  fetch("/api/me", { credentials: "same-origin" }).then(function (res) {
+    var type = res.headers.get("Content-Type") || "";
+    return res.ok && type.indexOf("application/json") !== -1 ? res.json() : null;
+  }).then(function (data) {
+    if (data && data.user && data.user.admin) document.getElementById("another-game").hidden = true;
+  }).catch(function () {});
   var game = (window.GAMES || []).filter(function (g) { return g.id === id; })[0];
 
   // Restart asks first. Cancel, Esc or clicking outside the box does nothing.

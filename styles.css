@@ -347,6 +347,26 @@ dialog::backdrop { background: rgba(0, 0, 0, .7); }
 .another-game:hover { filter: brightness(.85); }
 .another-game:active { transform: translateY(2px); }
 .play-side .community h2:first-child { margin-top: 0; }
+/* Wide screens: the page itself doesn't scroll. The right-hand column is
+   at most the screen's height (below the title bar, inside the page's top
+   and bottom padding); "Another Game?" stays at its top and the rating and
+   comments scroll under it. Narrow screens stack and scroll normally. */
+@media (min-width: 801px) {
+  .play-side {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - var(--bar-h) - 1.25rem - 3rem);
+  }
+  .play-side .another-game { flex-shrink: 0; }
+  .play-side .community {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain; /* reaching the end doesn't scroll the page */
+    padding-right: .5rem;         /* room for the scrollbar */
+    scrollbar-color: var(--bezel) transparent;
+  }
+}
 
 @media (max-width: 800px) {
   .play-layout { flex-direction: column; align-items: center; }
