@@ -40,6 +40,11 @@
 //
 // Don't rename or move a .swf once people have played it: saves are tied to its path.
 //
+// Games made of several files (Nitrome's Twang, Yin Yang, Hot Air 2 load
+// levels from folders next to the .swf): give each its own folder,
+// games/<id>/<id>.swf, with its subfolders copied as they are. The player
+// looks for a game's extra files next to its .swf.
+//
 // Hidden games go in games/hidden/ instead: the .swf files and their own list,
 // games/hidden/games.js. Only admins and accounts allowed to see hidden games
 // (admin page, or `python3 server/app.py allow-hidden NAME`) can load anything
@@ -104,6 +109,18 @@ window.GAMES = [
     blurb: "Rotate gems in fours to make matches."
   },
   {
+    id: "bloons-td",
+    title: "Bloons Tower Defense",
+    file: "games/bloons-td.swf",
+    blurb: "Build towers. Pop bloons. Don't let any through."
+  },
+  {
+    id: "bloons-td-2",
+    title: "Bloons Tower Defense 2",
+    file: "games/bloons-td-2.swf",
+    blurb: "More towers, more tracks, more bloons."
+  },
+  {
     id: "bloxorz",
     title: "Bloxorz",
     file: "games/bloxorz.swf",
@@ -156,6 +173,12 @@ window.GAMES = [
     title: "Cover Orange 2",
     file: "games/cover-orange-2.swf",
     blurb: "Shield the oranges from the toxic cloud, again!"
+  },
+  {
+    id: "dangle",
+    title: "Dangle",
+    file: "games/dangle/dangle.swf",
+    blurb: "Swing on a rope to grab every jewel."
   },
   {
     id: "devilish-candy-house",
@@ -237,10 +260,22 @@ window.GAMES = [
     blurb: "Swing for the fences."
   },
   {
+    id: "hot-air-2",
+    title: "Hot Air 2",
+    file: "games/hot-air-2/hot-air-2.swf",
+    blurb: "Float your balloon past spikes and danger."
+  },
+  {
     id: "jacksmith",
     title: "Jacksmith",
     file: "games/jacksmith.swf",
     blurb: "Forge weapons for your army, then watch them fight."
+  },
+  {
+    id: "knuckleheads",
+    title: "Knuckleheads",
+    file: "games/knuckleheads/knuckleheads.swf",
+    blurb: "Two heads, one rope. Swing your way through."
   },
   {
     id: "learn-to-fly",
@@ -267,6 +302,18 @@ window.GAMES = [
     blurb: "Draw a track and watch the rider go."
   },
   {
+    id: "magneboy",
+    title: "Magneboy",
+    file: "games/magneboy/magneboy.swf",
+    blurb: "Flip your magnet to pull and push through each level."
+  },
+  {
+    id: "make-a-pusheen",
+    title: "Make a Pusheen",
+    file: "games/make-a-pusheen.swf",
+    blurb: "Dress up your very own Pusheen cat."
+  },
+  {
     id: "my-new-room",
     title: "My New Room",
     file: "games/my-new-room.swf",
@@ -277,6 +324,13 @@ window.GAMES = [
     title: "N",
     file: "games/n.swf",
     blurb: "Ninja platformer. Dodge the drones, grab the gold."
+  },
+  {
+    id: "off-the-rails",
+    title: "Off the Rails",
+    file: "games/off-the-rails.swf",
+    blurb: "Lay down track and keep the train moving.",
+    scaleToFit: true // switches Flash scaling off, like Gravity Guy
   },
   {
     id: "pac-man",
@@ -367,6 +421,12 @@ window.GAMES = [
     title: "Papa's Scooperia",
     file: "games/papas-scooperia.swf",
     blurb: "Scoop ice cream onto fresh-baked cookies."
+  },
+  {
+    id: "pest-control",
+    title: "Pest Control",
+    file: "games/pest-control.swf",
+    blurb: "Deal with the bugs before they take over."
   },
   {
     id: "pokemon-towering-legends",
@@ -530,6 +590,12 @@ window.GAMES = [
     blurb: "That's... a lot of goo."
   },
   {
+    id: "twang",
+    title: "Twang",
+    file: "games/twang/twang.swf",
+    blurb: "Swing, stretch and fling across rubber bands."
+  },
+  {
     id: "ultimate-flash-sonic",
     title: "Ultimate Flash Sonic",
     file: "games/ultimate-flash-sonic.swf",
@@ -553,5 +619,11 @@ window.GAMES = [
     title: "Wolf Maker",
     file: "games/wolf-maker.swf",
     blurb: "Design your own wolf."
+  },
+  {
+    id: "yin-yang",
+    title: "Yin Yang",
+    file: "games/yin-yang/yin-yang.swf",
+    blurb: "Light and dark, two worlds at once."
   }
 ];

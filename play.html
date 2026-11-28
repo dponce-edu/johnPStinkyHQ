@@ -257,7 +257,12 @@
     // also blocks the browser's own menu).
     // A locked game waits for Ruffle's big Play button; pressing it unlocks.
     // quality: a game's own setting from games.js (lower runs faster).
+    // base: the game's own folder, so games that load extra files by relative
+    // path (Nitrome's "levels/…", "stages/…") find them next to the .swf
+    // rather than next to this page.
     var options = Object.assign({ openUrlMode: "deny", contextMenu: "off" }, source,
+                                game ? { base: new URL(game.file.replace(/[^\/]*$/, ""),
+                                                       location.href).href } : {},
                                 game && game.quality ? { quality: game.quality } : {},
                                 game && game.urlRewrite ? { urlRewriteRules: rewriteRules(game) } : {},
                                 // scaleToFit: fit the game to the window even if it turns
