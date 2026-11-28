@@ -38,7 +38,7 @@ which git ignores.
 
 3. Get the site and create the user the server runs as:
    ```sh
-   sudo git clone https://github.com/dponce-edu/johnPStinkyHQ.git /srv/club-escapade/site
+   sudo git clone https://github.com/dponce-edu/clubEscapade.git /srv/club-escapade/site
    sudo useradd --system --no-create-home --shell /usr/sbin/nologin clubescapade
    ```
    The game files (`games/*.swf`) aren't in git. Copy them over from your
