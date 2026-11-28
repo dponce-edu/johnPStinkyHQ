@@ -93,16 +93,22 @@ window.GAMES = [
     blurb: "Roll the block into the square hole."
   },
   {
-    id: "cactus-mccoy",
-    title: "Cactus McCoy and the Curse of Thorns",
-    file: "games/cactus-mccoy.swf",
-    blurb: "Punch, shoot and lasso your way across the Wild West."
+    id: "bubble-shooter",
+    title: "Bubble Shooter",
+    file: "games/bubble-shooter.swf",
+    blurb: "Pop matching bubbles before they reach the bottom."
   },
   {
     id: "cactus-mccoy-2",
     title: "Cactus McCoy 2: The Ruins of Calavera",
     file: "games/cactus-mccoy-2.swf",
     blurb: "Cactus is back, and the Enemigos want the Calavera treasure."
+  },
+  {
+    id: "cactus-mccoy",
+    title: "Cactus McCoy and the Curse of Thorns",
+    file: "games/cactus-mccoy.swf",
+    blurb: "Punch, shoot and lasso your way across the Wild West."
   },
   {
     id: "cheese-dreams",
@@ -115,6 +121,12 @@ window.GAMES = [
     title: "Cheese Dreams: New Moon",
     file: "games/cheese-dreams-new-moon.swf",
     blurb: "More bouncy, cheesy platforming."
+  },
+  {
+    id: "chronotron",
+    title: "Chronotron",
+    file: "games/chronotron.swf",
+    blurb: "Team up with past versions of yourself."
   },
   {
     id: "cover-orange",
@@ -225,6 +237,12 @@ window.GAMES = [
     blurb: "The penguin is back, and still determined to fly."
   },
   {
+    id: "lightbot",
+    title: "Lightbot",
+    file: "games/lightbot.swf",
+    blurb: "Program a robot to light up every blue tile."
+  },
+  {
     id: "line-rider-2",
     title: "Line Rider 2",
     file: "games/line-rider-2.swf",
@@ -249,12 +267,6 @@ window.GAMES = [
     blurb: "Eat the dots, dodge the ghosts."
   },
   {
-    id: "papa-louie",
-    title: "Papa Louie: When Pizzas Attack!",
-    file: "games/papa-louie.swf",
-    blurb: "Rescue the customers from the pizza monsters."
-  },
-  {
     id: "papa-louie-2",
     title: "Papa Louie 2: When Burgers Attack!",
     file: "games/papa-louie-2.swf",
@@ -265,6 +277,12 @@ window.GAMES = [
     title: "Papa Louie 3: When Sundaes Attack!",
     file: "games/papa-louie-3.swf",
     blurb: "Sweet treats, sour villains."
+  },
+  {
+    id: "papa-louie",
+    title: "Papa Louie: When Pizzas Attack!",
+    file: "games/papa-louie.swf",
+    blurb: "Rescue the customers from the pizza monsters."
   },
   {
     id: "papas-bakeria",
@@ -345,12 +363,6 @@ window.GAMES = [
     blurb: "Think with portals, in 2D."
   },
   {
-    id: "powerpuff-girls-puppybots",
-    title: "The Powerpuff Girls: Attack of the Puppybots",
-    file: "games/powerpuff-girls-puppybots.swf",
-    blurb: "Beat this bullet-mania as Bubbles, Blossom, and Buttercup."
-  },
-  {
     id: "raft-wars",
     title: "Raft Wars",
     file: "games/raft-wars.swf",
@@ -361,12 +373,6 @@ window.GAMES = [
     title: "Raft Wars 2",
     file: "games/raft-wars-2.swf",
     blurb: "More rafts, more water balloons, more war."
-  },
-  {
-    id: "red-ball",
-    title: "Red Ball: Definitive Edition",
-    file: "games/red-ball.swf",
-    blurb: "Roll, bounce and push your way through each level."
   },
   {
     id: "red-ball-2",
@@ -397,6 +403,12 @@ window.GAMES = [
     title: "Red Ball 4: Volume 3",
     file: "games/red-ball-4-vol-3.swf",
     blurb: "Into the factory for the final fight."
+  },
+  {
+    id: "red-ball",
+    title: "Red Ball: Definitive Edition",
+    file: "games/red-ball.swf",
+    blurb: "Roll, bounce and push your way through each level."
   },
   {
     id: "riddle-school",
@@ -430,6 +442,12 @@ window.GAMES = [
     blurb: "Run and jump through a tunnel in space."
   },
   {
+    id: "run-2",
+    title: "Run 2",
+    file: "games/run-2.swf",
+    blurb: "Run, jump and flip through tunnels in space."
+  },
+  {
     id: "skywire",
     title: "Skywire",
     file: "games/skywire.swf",
@@ -440,6 +458,48 @@ window.GAMES = [
     title: "Super Mario 63",
     file: "games/super-mario-63.swf",
     blurb: "Fan-made Mario adventure collecting Shine Sprites and Star Coins."
+  },
+  {
+    id: "super-smash-flash",
+    title: "Super Smash Flash",
+    file: "games/super-smash-flash.swf",
+    blurb: "The original fan-made platform fighter."
+  },
+  {
+    id: "super-smash-flash-2",
+    title: "Super Smash Flash 2",
+    file: "games/super-smash-flash-2.swf",
+    blurb: "The bigger fan-made sequel."
+  },
+  {
+    id: "powerpuff-girls-puppybots",
+    title: "The Powerpuff Girls: Attack of the Puppybots",
+    file: "games/powerpuff-girls-puppybots.swf",
+    blurb: "Beat this bullet-mania as Bubbles, Blossom, and Buttercup."
+  },
+  {
+    id: "worlds-hardest-game",
+    title: "The World's Hardest Game",
+    file: "games/worlds-hardest-game.swf",
+    blurb: "Red square, blue dots, yellow coins. Good luck."
+  },
+  {
+    id: "worlds-hardest-game-2",
+    title: "The World's Hardest Game 2",
+    file: "games/worlds-hardest-game-2.swf",
+    blurb: "Somehow even harder."
+  },
+  {
+    id: "worlds-hardest-game-3",
+    title: "The World's Hardest Game 3",
+    file: "games/worlds-hardest-game-3.swf",
+    blurb: "The square is back. So are the dots."
+  },
+  {
+    id: "tom-and-jerry-trap-o-matic",
+    title: "Tom and Jerry: Trap-o-Matic",
+    file: "games/tom-and-jerry-trap-o-matic.swf",
+    blurb: "Build chain-reaction traps to catch Jerry."
   },
   {
     id: "toxic-2",

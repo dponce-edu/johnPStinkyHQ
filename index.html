@@ -44,10 +44,13 @@
     return ph;
   }
 
+  // Hidden games (their file is in games/hidden/) get a gold border.
+  function isHidden(game) { return /^games\/hidden\//.test(game.file || ""); }
+
   // A game nobody has unlocked yet: a "?" instead of its picture and name.
   function lockedCard(game) {
     var a = document.createElement("a");
-    a.className = "card locked";
+    a.className = "card locked" + (isHidden(game) ? " hidden-game" : "");
     a.href = "play.html?game=" + encodeURIComponent(game.id);
     a.setAttribute("aria-label", "Locked game. Open it and press Play to unlock it.");
     var thumb = document.createElement("div");
@@ -74,7 +77,7 @@
 
   function card(game) {
     var a = document.createElement("a");
-    a.className = "card";
+    a.className = "card" + (isHidden(game) ? " hidden-game" : "");
     a.href = "play.html?game=" + encodeURIComponent(game.id);
 
     var thumb = document.createElement("div");

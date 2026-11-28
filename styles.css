@@ -9,6 +9,8 @@
   --screen: #000000;
   --accent: #00ff00;
   --accent-ink: #000000;
+  --gold: #d4af37;        /* hidden games: card border, window accents */
+  --gold-bright: #ffd84d;
   --bar-h: 5.5rem; /* height of the title bar at the top of every page */
 }
 
@@ -237,6 +239,24 @@ a:focus-visible, button:focus-visible {
 .win95-btn .icon-muted,
 .win95-btn[aria-pressed="true"] .icon-sound { display: none; }
 .win95-btn[aria-pressed="true"] .icon-muted { display: block; }
+
+/* Hidden games: gold title bar, a gold ring and glow around the window, and a
+   gold edge around the game. */
+.win95.hidden-game {
+  box-shadow:
+    inset -1px -1px 0 var(--w95-dark),
+    inset 1px 1px 0 #dfdfdf,
+    inset -2px -2px 0 var(--w95-shadow),
+    inset 2px 2px 0 var(--w95-light),
+    0 0 0 2px var(--gold),
+    0 0 18px rgba(212, 175, 55, .45),
+    6px 6px 0 rgba(0, 0, 0, .5);
+}
+.win95.hidden-game .win95-titlebar {
+  background: linear-gradient(90deg, #5c4500, #a67c00 55%, var(--gold));
+  text-shadow: 0 1px 0 rgba(0, 0, 0, .6);
+}
+.win95.hidden-game #stage { border-color: #8a6d1f var(--gold-bright) var(--gold-bright) #8a6d1f; }
 
 #stage {
   width: 100%;
@@ -622,6 +642,11 @@ button:disabled { opacity: .5; cursor: progress; }
 .card.locked { box-shadow: inset 0 0 0 2px var(--bezel); border: 2px dashed var(--bezel); }
 .card.locked:hover { border-color: var(--accent); }
 .card.locked h2 { letter-spacing: .2em; }
+/* Hidden games: gold border (dashed while still locked). */
+.card.hidden-game { box-shadow: inset 0 0 0 2px var(--gold); }
+.card.hidden-game:hover { box-shadow: inset 0 0 0 2px var(--gold-bright), 0 0 12px rgba(212, 175, 55, .5); }
+.card.locked.hidden-game { border-color: var(--gold); }
+.card.locked.hidden-game:hover { border-color: var(--gold-bright); }
 .thumb .mystery {
   font-size: 2.25rem;
   color: var(--ink);

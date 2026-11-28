@@ -230,6 +230,8 @@
     if (data && data.user && data.user.admin) document.getElementById("another-game").hidden = true;
   }).catch(function () {});
   var game = (window.GAMES || []).filter(function (g) { return g.id === id; })[0];
+  // Hidden games (file in games/hidden/): gold accents on the window.
+  if (game && /^games\/hidden\//.test(game.file || "")) bezel.classList.add("hidden-game");
 
   // Restart asks first. Cancel, Esc or clicking outside the box does nothing.
   var confirmBox = document.getElementById("confirm-restart");
