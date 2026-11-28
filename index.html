@@ -163,7 +163,8 @@
     if (seenKey) localStorage.setItem(seenKey, JSON.stringify(seen));
     if (unlocked) {
       var tally = document.getElementById("unlock-count");
-      tally.textContent = count + " of " + games.length + " games unlocked";
+      // The total stays a mystery until every hidden game has been found.
+      tally.textContent = count + " of " + (allHidden ? games.length : "???") + " games unlocked";
       tally.hidden = false;
     }
     if (!games.length) document.getElementById("empty").hidden = false;
@@ -173,6 +174,7 @@
   // Ask the server what's unlocked before drawing anything, so locked games'
   // pictures never flash up. No answer in 4 s, or no server: show everything.
   var drawn = false;
+  var allHidden = true; // from /api/unlocks: every hidden game found yet?
   function draw(unlocked, seenKey, orderKey) {
     if (drawn) return;
     drawn = true;
@@ -202,6 +204,7 @@
       });
       var set = {};
       data.unlocked.concat(data.open || []).forEach(function (id) { set[id] = true; });
+      allHidden = data.allHidden !== false;
       draw(set, "ce-unlocks-seen:" + data.user, "ce-game-order:" + data.user);
     })
     .catch(function () { withoutMature(); draw(null); });

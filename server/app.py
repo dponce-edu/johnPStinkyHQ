@@ -561,6 +561,17 @@ def earned_hidden(user):
             if any(user[col] >= n for col, n in info["reveal"].items())}
 
 
+def all_hidden_found(user):
+    """Has this user revealed every hidden game they can reveal? (Disabled
+    hidden games and ones with no reveal count don't need finding.) The home
+    page shows the game total as "???" until they have."""
+    if not user or may_see_hidden(user):
+        return True
+    findable = {gid for gid, info in with_settings(_games_in(HIDDEN_LIST)).items()
+                if info["reveal"] and not info["disabled"]}
+    return findable <= set(earned_hidden(user))
+
+
 def newly_revealed(user, column, value):
     """Hidden games that setting this counter to value reveals right now (and
     that they may play), as [{"id", "title"}] for the pop-up on the page."""
@@ -1477,7 +1488,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                   if r["game"] not in mature and r["game"] not in blocked],
                      "open": sorted(mature & allowed),
                      "blocked": sorted(blocked),
-                     "earned": earned}
+                     "earned": earned,
+                     "allHidden": all_hidden_found(user)}
 
     def api_playtime(self, con, game):
         """Body: {"seconds": N}, the active seconds since the last report."""
