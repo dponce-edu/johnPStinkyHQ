@@ -1798,6 +1798,34 @@ def cmd_clear_saves(args):
                                            user["username"], " in " + args.game if args.game else ""))
 
 
+def cmd_delete_user(args):
+    """Delete an account for good. The schema's ON DELETE CASCADE removes
+    their sessions, comments (and reports on them), ratings, saves, unlocks
+    and play time. The admin log keeps its text, just not the link."""
+    init_db()
+    con = connect()
+    user = find_user(con, args.username)
+    uid = user["id"]
+    counts = [(n, con.execute("SELECT COUNT(*) FROM %s WHERE user_id = ?" % table,
+                              (uid,)).fetchone()[0])
+              for table, n in (("comments", "comment"), ("ratings", "rating"),
+                               ("saves", "save"), ("unlocks", "unlocked game"))]
+    who = user["username"] + (" (%s)" % user["proper_name"] if user["proper_name"] else "")
+    print("This permanently deletes %s%s and their %s." % (
+        "admin " if user["is_admin"] else "", who,
+        ", ".join("%d %s%s" % (c, n, "" if c == 1 else "s") for n, c in counts)))
+    if not args.yes:
+        try:
+            answer = input("Type the username to confirm: ")
+        except EOFError:
+            answer = ""
+        if answer.strip().lower() != user["username"].lower():
+            sys.exit("Nothing deleted.")
+    con.execute("DELETE FROM users WHERE id = ?", (uid,))
+    con.commit()
+    print("Deleted %s. They've been logged out everywhere." % user["username"])
+
+
 def cmd_delete_comment(args):
     init_db()
     con = connect()
@@ -1954,6 +1982,9 @@ def main():
                        ("disallow-hidden", "take hidden games away")):
         sub.add_parser(name, help=text).add_argument("username")
     sub.add_parser("delete-comment", help="delete one comment by id").add_argument("id", type=int)
+    du = sub.add_parser("delete-user", help="delete an account and everything it made")
+    du.add_argument("username")
+    du.add_argument("--yes", action="store_true", help="skip typing the username to confirm")
     au = sub.add_parser("add-user", help="create an account (prints a random PIN)")
     au.add_argument("username")
     au.add_argument("--choose", action="store_true",
@@ -2037,6 +2068,8 @@ def main():
         cmd_reset_pin(args)
     elif args.command == "delete-comment":
         cmd_delete_comment(args)
+    elif args.command == "delete-user":
+        cmd_delete_user(args)
     elif args.command == "list-comments":
         cmd_list_comments(args)
     elif args.command == "clear-reports":

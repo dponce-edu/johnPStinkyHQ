@@ -100,6 +100,7 @@ Run these with `sudo -u clubescapade python3 /srv/club-escapade/site/server/app.
 | `ban NAME` / `unban NAME` | Banning logs them out and hides their comments and ratings |
 | `list-comments` | Shows the 20 newest comments with their IDs and report counts. Add `--reported`, `--game ID`, `--user NAME` or `-n 50` to narrow or widen it |
 | `delete-comment ID` | Deletes one comment |
+| `delete-user NAME` | Deletes the account for good, with its comments, ratings, saves, unlocks and play time, and logs them out. Asks you to type the username to confirm (`--yes` skips that). To keep someone off the site without losing anything, use `ban` instead |
 | `reset-pin NAME` | Gives them a new random PIN and logs them out everywhere. Add `--choose` to type one yourself |
 | *(admin page)* **Reset a student's PIN** / **Change my PIN** | The same reset for students (random, or one you type), shown once on screen and never logged. Admins change their own PIN there too, after typing their current one; that logs them out on other computers |
 | `clear-reports ID` | Keeps a reported comment and drops its reports |
