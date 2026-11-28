@@ -101,6 +101,7 @@ Run these with `sudo -u clubescapade python3 /srv/club-escapade/site/server/app.
 | `list-comments` | Shows the 20 newest comments with their IDs and report counts. Add `--reported`, `--game ID`, `--user NAME` or `-n 50` to narrow or widen it |
 | `delete-comment ID` | Deletes one comment |
 | `reset-pin NAME` | Gives them a new random PIN and logs them out everywhere. Add `--choose` to type one yourself |
+| *(admin page)* **Reset a student's PIN** / **Change my PIN** | The same reset for students (random, or one you type), shown once on screen and never logged. Admins change their own PIN there too, after typing their current one; that logs them out on other computers |
 | `clear-reports ID` | Keeps a reported comment and drops its reports |
 | `reset-unlocks NAME` | Hides all their games behind the "?" again. Add `--game ID` for just one |
 | `clear-saves NAME` | Deletes all of someone's game saves. Add `--game ID` for just one game |

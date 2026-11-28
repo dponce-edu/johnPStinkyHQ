@@ -17,7 +17,7 @@
 <!-- Admin tools. Anyone logged in can load this page, but every request it
      makes is refused by the server unless the account is an admin.
      Sidebar on the left picks which tool shows on the right (#reports,
-     #timeouts, #games, #log, #playtime in the address, so a refresh stays put).
+     #timeouts, #pins, #games, #log, #playtime, #mypin in the address, so a refresh stays put).
      Invites, hidden-games access, grade levels and per-student unlocks aren't
      on this page for now; the server and command line still have them all
      (see `python3 server/app.py --help`). -->
@@ -29,11 +29,14 @@
       <a class="side-item" href="#reports" data-panel="reports">Reported comments
         <span id="report-count" class="side-count" hidden></span></a>
       <a class="side-item" href="#timeouts" data-panel="timeouts">Timeout a student</a>
+      <a class="side-item" href="#pins" data-panel="pins">Reset a student's PIN</a>
       <h2 class="side-group">Games</h2>
       <a class="side-item" href="#games" data-panel="games">Game settings</a>
       <h2 class="side-group">Logs</h2>
       <a class="side-item" href="#log" data-panel="log">Admin log</a>
       <a class="side-item" href="#playtime" data-panel="playtime">Play time</a>
+      <h2 class="side-group">My account</h2>
+      <a class="side-item" href="#mypin" data-panel="mypin">Change my PIN</a>
     </nav>
 
     <main class="admin">
@@ -62,6 +65,47 @@
 
         <h3>Timed out now</h3>
         <ul id="timeouts" class="comments"></ul>
+      </section>
+
+      <section id="panel-pins" class="admin-panel" hidden>
+        <h2>Reset a student's PIN</h2>
+        <p class="muted">For a student who forgot theirs. They get a new PIN and are
+          logged out everywhere. Leave "New PIN" blank for a random one.</p>
+        <form id="pin-form" class="timeout-form">
+          <label for="pin-grade">Grade</label>
+          <select id="pin-grade">
+            <option value="">All</option><option value="1">1</option><option value="2">2</option>
+            <option value="3">3</option><option value="4">4</option><option value="5">5</option>
+          </select>
+          <label for="pin-user">Student</label>
+          <select id="pin-user" required></select>
+          <label for="pin-new">New PIN</label>
+          <input id="pin-new" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
+                 autocomplete="off" placeholder="Random" class="pin-input">
+          <button type="submit">Reset PIN</button>
+        </form>
+        <div id="pin-result" class="pin-result" hidden>
+          <p><strong id="pin-who"></strong>'s new PIN is</p>
+          <p id="pin-value" class="pin-value"></p>
+          <p class="muted">Give it to them in person. It won't be shown again.</p>
+        </div>
+      </section>
+
+      <section id="panel-mypin" class="admin-panel" hidden>
+        <h2>Change my PIN</h2>
+        <p class="muted">Logs you out on every other computer. This one stays logged in.</p>
+        <form id="mypin-form" class="pin-form">
+          <label for="mypin-current">Current PIN</label>
+          <input id="mypin-current" type="password" inputmode="numeric" pattern="[0-9]{6}"
+                 maxlength="6" autocomplete="current-password" required class="pin-input">
+          <label for="mypin-new">New PIN</label>
+          <input id="mypin-new" type="password" inputmode="numeric" pattern="[0-9]{6}"
+                 maxlength="6" autocomplete="new-password" required class="pin-input">
+          <label for="mypin-again">New PIN again</label>
+          <input id="mypin-again" type="password" inputmode="numeric" pattern="[0-9]{6}"
+                 maxlength="6" autocomplete="new-password" required class="pin-input">
+          <button type="submit">Change PIN</button>
+        </form>
       </section>
 
       <section id="panel-games" class="admin-panel" hidden>
@@ -202,7 +246,7 @@
 
   // ---- sidebar: one panel at a time, chosen by the address's #name
 
-  var PANELS = ["reports", "timeouts", "games", "log", "playtime"];
+  var PANELS = ["reports", "timeouts", "pins", "games", "log", "playtime", "mypin"];
   function showPanel() {
     var name = location.hash.slice(1);
     if (PANELS.indexOf(name) === -1) name = "reports";
@@ -215,6 +259,7 @@
     });
     say("");
     if (name === "playtime") loadPlaytime();
+    if (name !== "pins") pinResult.hidden = true; // don't leave a PIN on screen
   }
   window.addEventListener("hashchange", showPanel);
   function goTo(name) {
@@ -314,6 +359,7 @@
     return api("GET", "/api/admin/users").then(function (data) {
       students = data.users.filter(function (u) { return !u.admin; });
       fillTimeoutStudents();
+      fillPinStudents();
 
       if (!lengthSel.options.length) {
         data.choices.forEach(function (m) { lengthSel.append(new Option(lengthLabel(m), m)); });
@@ -363,6 +409,74 @@
       button.disabled = false;
       userSel.value = "";
     });
+  });
+
+  // ---- reset a student's PIN
+
+  var pinForm = document.getElementById("pin-form");
+  var pinUser = document.getElementById("pin-user");
+  var pinGrade = document.getElementById("pin-grade");
+  var pinNew = document.getElementById("pin-new");
+  var pinResult = document.getElementById("pin-result");
+
+  function fillPinStudents() {
+    var keep = pinUser.value;
+    pinUser.replaceChildren(new Option("Pick a student", ""));
+    students.forEach(function (u) {
+      if (!pinGrade.value || String(u.grade) === pinGrade.value) pinUser.append(new Option(shown(u), u.name));
+    });
+    pinUser.value = keep;
+    if (pinUser.selectedIndex === -1) pinUser.value = "";
+  }
+  pinGrade.addEventListener("change", fillPinStudents);
+
+  pinForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    pinResult.hidden = true;
+    if (!pinUser.value) { say("Pick a student first."); pinUser.focus(); return; }
+    if (pinNew.value && !/^[0-9]{6}$/.test(pinNew.value)) {
+      say("PINs are exactly 6 digits, or leave it blank for a random one."); pinNew.focus(); return;
+    }
+    var button = pinForm.querySelector("button");
+    twoStep(button, "Really reset?", function () {
+      api("POST", "/api/admin/reset-pin", { username: pinUser.value, pin: pinNew.value })
+        .then(function (r) {
+          say("");
+          document.getElementById("pin-who").textContent = r.adminName;
+          document.getElementById("pin-value").textContent = r.pin;
+          pinResult.hidden = false;
+          pinNew.value = "";
+          loadLog();
+        })
+        .catch(fail)
+        .then(function () {
+          button.disabled = false;
+          delete button.dataset.armed;
+          button.textContent = "Reset PIN";
+        });
+    });
+  });
+
+  // ---- change my own PIN
+
+  var myPinForm = document.getElementById("mypin-form");
+  myPinForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var current = document.getElementById("mypin-current");
+    var fresh = document.getElementById("mypin-new");
+    var again = document.getElementById("mypin-again");
+    if (!/^[0-9]{6}$/.test(fresh.value)) { say("Your new PIN needs to be 6 digits."); fresh.focus(); return; }
+    if (fresh.value !== again.value) { say("The new PINs don't match."); again.value = ""; again.focus(); return; }
+    var button = myPinForm.querySelector("button");
+    button.disabled = true;
+    api("POST", "/api/admin/my-pin", { current: current.value, pin: fresh.value })
+      .then(function () {
+        myPinForm.reset();
+        say("PIN changed. Use the new one next time you log in.");
+        loadLog();
+      })
+      .catch(fail)
+      .then(function () { button.disabled = false; });
   });
 
   // ---- game settings: maturity and disabled, for every game

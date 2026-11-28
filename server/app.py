@@ -718,6 +718,8 @@ ROUTES = [
     ("GET", r"/api/admin/unlocks/([A-Za-z0-9_-]{1,40})", "admin_unlocks"),
     ("POST", r"/api/admin/unlocks", "admin_set_unlocks"),
     ("POST", r"/api/admin/grade", "admin_grade"),
+    ("POST", r"/api/admin/reset-pin", "admin_reset_pin"),
+    ("POST", r"/api/admin/my-pin", "admin_my_pin"),
     ("GET", r"/api/admin/games", "admin_games"),
     ("GET", r"/api/admin/log", "admin_log"),
     ("GET", r"/api/admin/playtime", "admin_playtime"),
@@ -1378,6 +1380,51 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         log_admin(con, admin, "Set %s's grade to %d" % (admin_name(user), grade))
         return 200, {"name": user["username"], "adminName": admin_name(user), "grade": grade}
 
+    def api_admin_reset_pin(self, con):
+        """Body: {"username": NAME, "pin": optional 6 digits}. Gives a student
+        a new PIN (random unless one is given) and logs them out everywhere.
+        The PIN goes back to the admin once and is never logged or stored."""
+        admin = self.require_admin(con)
+        data = self.json_body()
+        name, pin = data.get("username"), data.get("pin")
+        need(isinstance(name, str) and name, 400, "Pick a student.")
+        need(pin is None or pin == "" or (isinstance(pin, str) and PIN_RE.fullmatch(pin)), 400,
+             "PINs are exactly %d digits." % PIN_LENGTH)
+        user = con.execute("SELECT * FROM users WHERE username = ?", (name,)).fetchone()
+        need(user is not None and user["invite_code"] is None, 404,
+             "No student called %s." % name)
+        need(not user["is_admin"], 400,
+             "That's an admin. Admins change their own PIN under My account.")
+        pin = pin or random_pin()
+        con.execute("UPDATE users SET password = ? WHERE id = ?", (hash_password(pin), user["id"]))
+        con.execute("DELETE FROM sessions WHERE user_id = ?", (user["id"],))
+        log_admin(con, admin, "Reset %s's PIN" % admin_name(user))
+        return 200, {"name": user["username"], "adminName": admin_name(user), "pin": pin}
+
+    def api_admin_my_pin(self, con):
+        """Body: {"current": PIN, "pin": new PIN}. Changes the admin's own PIN
+        and logs them out everywhere else; this browser stays logged in."""
+        admin = self.require_admin(con)
+        data = self.json_body()
+        current, pin = data.get("current"), data.get("pin")
+        need(isinstance(current, str) and PIN_RE.fullmatch(current), 400,
+             "Enter your current %d-digit PIN." % PIN_LENGTH)
+        need(isinstance(pin, str) and PIN_RE.fullmatch(pin), 400,
+             "Your new PIN needs to be %d digits." % PIN_LENGTH)
+        # Same wrong-PIN limit as logging in, so this can't be used to guess.
+        fail_key = "loginfail-user:" + admin["username"].lower()
+        need(LIMITS.allowed(fail_key, PIN_FAILS_PER_USER, 900), 429,
+             "Too many wrong PINs. Wait 15 minutes and try again.")
+        if not check_password(current, admin["password"]):
+            LIMITS.add(fail_key)
+            raise ApiError(401, "That isn't your current PIN.")
+        need(pin != current, 400, "That's the PIN you have now. Pick a different one.")
+        con.execute("UPDATE users SET password = ? WHERE id = ?", (hash_password(pin), admin["id"]))
+        con.execute("DELETE FROM sessions WHERE user_id = ? AND token_hash != ?",
+                    (admin["id"], token_hash(self.session_token())))
+        log_admin(con, admin, "Changed their own PIN")
+        return 200, {"ok": True}
+
     def api_admin_unlocks(self, con, name):
         """The games a student has unlocked, and every game they could."""
         self.require_admin(con)
@@ -1638,10 +1685,14 @@ def cmd_set_flag(args, column, value, done):
     print(done % user["username"])
 
 
+def random_pin():
+    return str(secrets.randbelow(10 ** PIN_LENGTH)).zfill(PIN_LENGTH)
+
+
 def pick_pin(args, name):
     """--choose: type it twice. Otherwise a random one."""
     if not args.choose:
-        return str(secrets.randbelow(10 ** PIN_LENGTH)).zfill(PIN_LENGTH)
+        return random_pin()
     pin = getpass.getpass("New %d-digit PIN for %s: " % (PIN_LENGTH, name))
     if not PIN_RE.fullmatch(pin):
         sys.exit("PINs are exactly %d digits. Nothing changed." % PIN_LENGTH)

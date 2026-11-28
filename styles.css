@@ -720,3 +720,12 @@ button:disabled { opacity: .5; cursor: progress; }
   white-space: nowrap;
   border: 0;
 }
+
+/* Admin page: PIN reset and Change my PIN */
+.pin-input { width: 7rem; font-family: monospace; letter-spacing: 0.15em; }
+.pin-form { display: grid; grid-template-columns: max-content 8rem; gap: 0.5rem 0.75rem;
+            align-items: center; justify-items: start; }
+.pin-form button { grid-column: 2; }
+.pin-result { margin-top: 1rem; padding: 0.75rem 1rem; border: 2px solid var(--accent); }
+.pin-result p { margin: 0.25rem 0; }
+.pin-value { font-family: monospace; font-size: 2rem; letter-spacing: 0.3em; font-weight: bold; }
