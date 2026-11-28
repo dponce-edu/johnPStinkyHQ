@@ -268,13 +268,23 @@
         if (done) return;
         clearTimeout(fallback);
         var found = r && r.earned && r.earned[0];
-        if (!found) { go(pick.id); return; }
-        var box = document.getElementById("hidden-found");
-        // Any way of closing it (button, Esc) goes to the hidden game.
-        box.addEventListener("close", function () { go(found.id); });
-        box.showModal();
+        if (found) revealHiddenGame(found); else go(pick.id);
       });
   });
+
+  // "Wait... a hidden game?" pop-up, then off to that game. Used when a press
+  // of "Another Game?", a comment (comments.js) or a rating reveals a hidden
+  // game. found: {id, title} from the server's "earned" list.
+  function revealHiddenGame(found) {
+    var box = document.getElementById("hidden-found");
+    if (box.open) return;
+    // Any way of closing it (button, Esc) goes to the hidden game.
+    box.addEventListener("close", function () {
+      location.href = "play.html?game=" + encodeURIComponent(found.id);
+    }, { once: true });
+    box.showModal();
+  }
+  window.revealHiddenGame = revealHiddenGame;
   // Admins don't get the button.
   fetch("/api/me", { credentials: "same-origin" }).then(function (res) {
     var type = res.headers.get("Content-Type") || "";

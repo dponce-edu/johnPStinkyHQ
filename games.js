@@ -13,9 +13,12 @@
 //          player sizes itself to the game once it loads.
 //   quality optional drawing quality: "low", "medium" or "high" (the default).
 //          Lower turns off edge smoothing, which helps busy games that lag.
-//   anotherGame  hidden games only (games/hidden/games.js): a number, e.g.
-//          anotherGame: 25. Students who've pressed "Another Game?" that many
-//          times in total can see and play this one hidden game.
+//   anotherGame / commentsPosted / gamesRated  hidden games only
+//          (games/hidden/games.js): a number, e.g. commentsPosted: 10.
+//          Students who reach it in total ("Another Game?" presses, comments
+//          posted, or games rated) can see and play this one hidden game. The
+//          action that reaches it shows a "Wait... a hidden game?" pop-up and
+//          goes to the game.
 //   mature optional grade level 1-5, written as a number (mature: 3). A mature
 //          game never sits behind the "?" lock: students at that grade or
 //          above (and admins) see it open; everyone else can't see or load it.

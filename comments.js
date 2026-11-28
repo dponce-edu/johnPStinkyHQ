@@ -72,8 +72,18 @@
     if (!b) return;
     if (!state.user) { say("Log in below to rate this game."); return; }
     api("PUT", "/api/games/" + gameId + "/rating", { stars: Number(b.dataset.stars) })
-      .then(function (data) { state.rating = data.rating; renderRating(); say(""); }, fail);
+      .then(function (data) {
+        state.rating = data.rating; renderRating(); say("");
+        revealIfEarned(data);
+      }, fail);
   });
+
+  // Some hidden games are revealed by your 10th comment, 50th rating, etc.
+  // The server says so in "earned"; play.html shows the pop-up and goes there.
+  function revealIfEarned(data) {
+    var found = data && data.earned && data.earned[0];
+    if (found && window.revealHiddenGame) window.revealHiddenGame(found);
+  }
 
   // ---- account
 
@@ -233,6 +243,7 @@
       updateCount();
       renderComments();
       say("Comment posted.");
+      revealIfEarned(data);
     }, fail).then(function () { post.disabled = false; });
   });
 

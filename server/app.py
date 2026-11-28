@@ -75,7 +75,9 @@ CREATE TABLE IF NOT EXISTS users (
     invite_code TEXT,                          -- set until the student joins
     hidden_games INTEGER NOT NULL DEFAULT 0,   -- may see games/hidden/
     grade_level INTEGER NOT NULL DEFAULT 1,    -- 1-5; mature games need at least theirs
-    another_game_clicks INTEGER NOT NULL DEFAULT 0  -- lifetime "Another Game?" presses
+    another_game_clicks INTEGER NOT NULL DEFAULT 0, -- lifetime "Another Game?" presses
+    comments_posted INTEGER NOT NULL DEFAULT 0,     -- lifetime comments (deleting doesn't lower it)
+    games_rated INTEGER NOT NULL DEFAULT 0          -- games they've given stars to
 );
 CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY,
@@ -176,6 +178,14 @@ def init_db():
         con.execute("ALTER TABLE users ADD COLUMN grade_level INTEGER NOT NULL DEFAULT 1")
     if "another_game_clicks" not in columns:
         con.execute("ALTER TABLE users ADD COLUMN another_game_clicks INTEGER NOT NULL DEFAULT 0")
+    if "comments_posted" not in columns:
+        con.execute("ALTER TABLE users ADD COLUMN comments_posted INTEGER NOT NULL DEFAULT 0")
+        con.execute("UPDATE users SET comments_posted = "
+                    "(SELECT COUNT(*) FROM comments c WHERE c.user_id = users.id)")
+    if "games_rated" not in columns:
+        con.execute("ALTER TABLE users ADD COLUMN games_rated INTEGER NOT NULL DEFAULT 0")
+        con.execute("UPDATE users SET games_rated = "
+                    "(SELECT COUNT(*) FROM ratings r WHERE r.user_id = users.id)")
     con.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_by_invite ON users(invite_code)")
     con.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_by_screen_name "
                 "ON users(screen_name COLLATE NOCASE)")
@@ -448,16 +458,17 @@ def _games_in(path):
                 file = re.search(r'\bfile:\s*"([^"]+)"', block)
                 title = re.search(r'\btitle:\s*"((?:[^"\\]|\\.)*)"', block)
                 mature = re.search(r"\bmature:\s*([0-9]+)", block)
-                earn = re.search(r"\banotherGame:\s*([0-9]+)", block)
+                reveal = {col: int(m.group(1)) for key, col in REVEAL_RULES.items()
+                          for m in [re.search(r"\b%s:\s*([0-9]+)" % key, block)] if m}
                 extra = {k: m.group(1) for k in ("blurb", "ratio", "quality")
                          for m in [re.search(r'\b%s:\s*"((?:[^"\\]|\\.)*)"' % k, block)] if m}
                 games[gid.group(1)] = {
                     "title": title.group(1).replace('\\"', '"') if title else gid.group(1),
                     "file": file.group(1) if file else "",
                     "mature": int(mature.group(1)) if mature else 0,
-                    # Hidden games only: visible to students who've pressed
-                    # "Another Game?" at least this many times (0: never).
-                    "another_game": int(earn.group(1)) if earn else 0,
+                    # Hidden games only: {users column: count}. Visible to
+                    # students who've reached any one of them. See REVEAL_RULES.
+                    "reveal": reveal,
                     "extra": extra,
                 }
             cached = _games[path] = (mtime, games)
@@ -529,14 +540,39 @@ def grade_allows(user, level):
     return not level or bool(user and (user["is_admin"] or user["grade_level"] >= level))
 
 
+# Ways a student can reveal one hidden game, without hidden-games access: a
+# hidden game's entry names the key and a count, e.g. `commentsPosted: 10`.
+# Each maps to a lifetime counter on their account.
+REVEAL_RULES = {
+    "anotherGame": "another_game_clicks",   # "Another Game?" presses
+    "commentsPosted": "comments_posted",    # comments posted
+    "gamesRated": "games_rated",            # games given stars
+}
+REVEAL_TEXT = {"another_game_clicks": "%d Another Game? presses",
+               "comments_posted": "%d comments", "games_rated": "%d games rated"}
+
+
 def earned_hidden(user):
-    """{id: info} for hidden games this user has made visible by pressing
-    "Another Game?" enough times (without having hidden-games access)."""
+    """{id: info} for hidden games this user has revealed by reaching one of
+    their reveal counts (without having hidden-games access)."""
     if not user or may_see_hidden(user):
         return {}
-    clicks = user["another_game_clicks"]
     return {gid: info for gid, info in _games_in(HIDDEN_LIST).items()
-            if info["another_game"] and clicks >= info["another_game"]}
+            if any(user[col] >= n for col, n in info["reveal"].items())}
+
+
+def newly_revealed(user, column, value):
+    """Hidden games that setting this counter to value reveals right now (and
+    that they may play), as [{"id", "title"}] for the pop-up on the page."""
+    if not user or may_see_hidden(user):
+        return []
+    before = earned_hidden(user)
+    after = dict(user, **{column: value})
+    playable_now = game_ids(after)
+    return [{"id": gid, "title": info["title"]}
+            for gid, info in sorted(_games_in(HIDDEN_LIST).items())
+            if info["reveal"].get(column) == value and gid not in before
+            and gid in playable_now]
 
 
 def listed_games(user):
@@ -1091,8 +1127,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         cur = con.execute(
             "INSERT INTO comments (game, user_id, body, created) VALUES (?, ?, ?, ?)",
             (game, user["id"], body, now))
+        posted = user["comments_posted"] + 1
+        con.execute("UPDATE users SET comments_posted = ? WHERE id = ?", (posted, user["id"]))
         return 201, {"comment": {"id": cur.lastrowid, "user": shown_name(user),
-                                 "body": body, "created": now, "canDelete": True}}
+                                 "body": body, "created": now, "canDelete": True},
+                     "earned": newly_revealed(user, "comments_posted", posted)}
 
     def api_rate(self, con, game):
         user = self.require_user(con, "Log in to rate games.")
@@ -1102,12 +1141,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         need(type(stars) is int and 1 <= stars <= 5, 400, "Ratings are 1 to 5 stars.")
         need(LIMITS.take("rate:%d" % user["id"], 30, 60), 429,
              "Slow down a little.")
+        first = con.execute("SELECT 1 FROM ratings WHERE game = ? AND user_id = ?",
+                            (game, user["id"])).fetchone() is None
         con.execute(
             "INSERT INTO ratings (game, user_id, stars, updated) VALUES (?, ?, ?, ?) "
             "ON CONFLICT (game, user_id) DO UPDATE SET stars = excluded.stars, "
             "updated = excluded.updated",
             (game, user["id"], stars, int(time.time())))
-        return 200, {"rating": rating_summary(con, game, user)}
+        earned = []
+        if first:  # changing a rating doesn't count again
+            rated = user["games_rated"] + 1
+            con.execute("UPDATE users SET games_rated = ? WHERE id = ?", (rated, user["id"]))
+            earned = newly_revealed(user, "games_rated", rated)
+        return 200, {"rating": rating_summary(con, game, user), "earned": earned}
 
     def api_delete_comment(self, con, comment_id):
         user = self.require_user(con, "Log in first.")
@@ -1276,7 +1322,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return 200, {"games": [{
             "id": gid, "hidden": gid in hidden, "mature": info["mature"],
             "listedMature": info["listed_mature"], "disabled": info["disabled"],
-            "anotherGame": info["another_game"],
+            "reveal": " or ".join(REVEAL_TEXT[col] % n for col, n in info["reveal"].items()),
         } for gid, info in sorted(with_settings(games).items())]}
 
     def api_admin_game_settings(self, con, game):
@@ -1463,15 +1509,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return 200, {"counted": False}
         clicks = user["another_game_clicks"] + 1
         con.execute("UPDATE users SET another_game_clicks = ? WHERE id = ?", (clicks, user["id"]))
-        # Hidden games this exact press reveals (and that they may play: not
-        # disabled, grade allows), for the "Wait... a hidden game?" pop-up.
-        after = dict(user, another_game_clicks=clicks)
-        playable_now = game_ids(after)
-        newly = [{"id": gid, "title": info["title"]}
-                 for gid, info in sorted(_games_in(HIDDEN_LIST).items())
-                 if info["another_game"] == clicks and not may_see_hidden(user)
-                 and gid in playable_now]
-        return 200, {"counted": True, "clicks": clicks, "earned": newly}
+        return 200, {"counted": True, "clicks": clicks,
+                     "earned": newly_revealed(user, "another_game_clicks", clicks)}
 
     def api_unlock(self, con, game):
         user = self.require_user(con, "Log in first.")
@@ -1796,7 +1835,8 @@ def cmd_list_users(args):
             flags.insert(0, u["proper_name"])
         if not u["is_admin"]:
             flags.append("grade %d" % u["grade_level"])
-            flags.append("%d another-game" % u["another_game_clicks"])
+            flags.append("%d another-game, %d comments, %d rated"
+                         % (u["another_game_clicks"], u["comments_posted"], u["games_rated"]))
         if u["timeout_until"] > time.time():
             flags.append("timeout until " + until_text(u["timeout_until"]))
         print("%4d  %-20s %s  %s" % (u["id"], u["username"],
