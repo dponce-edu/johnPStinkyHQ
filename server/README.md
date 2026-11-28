@@ -148,9 +148,12 @@ cd /srv/club-escapade/site && sudo git pull && sudo systemctl restart club-escap
 computer whenever you add or change games. Run this in the repo folder on your
 computer (replace `pi@your-pi` with your Pi's SSH login):
 ```sh
-rsync -av --delete --rsync-path="sudo rsync" games/ pi@your-pi:/srv/club-escapade/site/games/
+rsync -av --delete --chmod=D755,F644 --rsync-path="sudo rsync" games/ pi@your-pi:/srv/club-escapade/site/games/
 ```
-`--delete` removes games from the Pi that you've deleted locally. Don't
+`--delete` removes games from the Pi that you've deleted locally.
+`--chmod=D755,F644` makes every copied file readable by the web server, even
+if it was saved on your computer as readable only by you (some downloads are);
+without it, those games fail to load on the site. Don't
 rename a game file once students have played it, because their saves are tied
 to the file name. This copies the hidden games too.
 

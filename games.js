@@ -19,6 +19,14 @@
 //          posted, or games rated) can see and play this one hidden game. The
 //          action that reaches it shows a "Wait... a hidden game?" pop-up and
 //          goes to the game.
+//   restartOnLoad optional true: restart the game once, automatically, right
+//          after it first starts. For a game that's broken the first time it
+//          starts on a page but always works after the Restart button.
+//   urlRewrite optional list of [pattern, "/path/on/this/site"]. Requests
+//          the game makes whose address matches a pattern (a regular
+//          expression for the whole address) go to that file on this site
+//          instead, e.g. a stand-in in game-stubs/ for a dead outside service
+//          the game waits on when it starts.
 //   mature optional grade level 1-5, written as a number (mature: 3). A mature
 //          game never sits behind the "?" lock: students at that grade or
 //          above (and admins) see it open; everyone else can't see or load it.
@@ -384,7 +392,17 @@ window.GAMES = [
     id: "red-ball-2",
     title: "Red Ball 2",
     file: "games/red-ball-2.swf",
-    blurb: "More rolling, more bouncing."
+    blurb: "More rolling, more bouncing.",
+    // First start on a page: unclickable credits or a grey screen; a restart
+    // always fixes it, so do one automatically.
+    restartOnLoad: true,
+    // Starts on a grey/black screen at random while King.com's counter and
+    // MochiBot (both long gone, and blocked here) fail; answer them locally.
+    urlRewrite: [
+      ["^https?://(www\\.)?mygame\\.com/.*$", "/game-stubs/empty.txt"],
+      ["^https?://([a-z0-9-]+\\.)?king\\.com/.*$", "/game-stubs/empty.txt"],
+      ["^https?://core\\.mochibot\\.com/.*$", "/game-stubs/empty.swf"]
+    ]
   },
   {
     id: "red-ball-3",

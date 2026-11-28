@@ -137,6 +137,96 @@
     bezel.style.setProperty("--ar-num", String(w / h));
   }
 
+  // The game's stage size, read from the start of its .swf file before the
+  // game runs. Some games (Red Ball 2, 3) turn Flash scaling off and measure
+  // the screen as they start, so the window must already be the right shape:
+  // resizing it once they're running leaves them broken until a restart.
+  // Resolves {w, h}, or null if it can't tell (then the size comes from
+  // Ruffle once the game loads, as before).
+  function swfSize(url) {
+    var reader = null;
+    function bytes(min) { // at least `min` bytes from the start of the file
+      var parts = [], have = 0;
+      function more() {
+        if (have >= min) return Promise.resolve(join(parts, have));
+        return reader.read().then(function (r) {
+          if (r.done) return join(parts, have);
+          parts.push(r.value); have += r.value.length;
+          return more();
+        });
+      }
+      return more();
+    }
+    function join(parts, n) {
+      var out = new Uint8Array(n), at = 0;
+      parts.forEach(function (p) { out.set(p, at); at += p.length; });
+      return out;
+    }
+    function inflate(data) { // zlib data -> its first 32 bytes
+      var ds = new DecompressionStream("deflate");
+      var w = ds.writable.getWriter();
+      // Not closed: this is only the start of the file, and closing would make
+      // some browsers throw away what was already unpacked.
+      w.write(data).catch(function () {});
+      var r = ds.readable.getReader(), parts = [], have = 0;
+      function more() {
+        if (have >= 32) { r.cancel().catch(function () {}); return join(parts, have); }
+        return r.read().then(function (x) {
+          if (x.done) return join(parts, have);
+          parts.push(x.value); have += x.value.length;
+          return more();
+        });
+      }
+      return more();
+    }
+    function rect(b) { // SWF RECT: 5-bit size, then xmin, xmax, ymin, ymax (twips)
+      var n = b[0] >> 3, pos = 5;
+      function bits(count) {
+        var v = 0;
+        for (var i = 0; i < count; i++, pos++) v = v * 2 + ((b[pos >> 3] >> (7 - (pos & 7))) & 1);
+        return v;
+      }
+      var x0 = bits(n), x1 = bits(n), y0 = bits(n), y1 = bits(n);
+      return { w: (x1 - x0) / 20, h: (y1 - y0) / 20 };
+    }
+    return fetch(url, { credentials: "same-origin" }).then(function (res) {
+      if (!res.ok || !res.body) return null;
+      reader = res.body.getReader();
+      return bytes(4096).then(function (head) {
+        reader.cancel().catch(function () {}); // the rest isn't needed here
+        var sig = String.fromCharCode(head[0], head[1], head[2]);
+        if (sig === "FWS") return rect(head.subarray(8));
+        if (sig === "CWS" && window.DecompressionStream) return inflate(head.subarray(8)).then(rect);
+        return null; // LZMA-compressed (ZWS) or not a Flash file
+      });
+    }).then(function (size) {
+      return size && size.w > 0 && size.h > 0 ? size : null;
+    }).catch(function () { return null; });
+  }
+
+  // Shape the window to the game before it starts, with no slide animation.
+  function sizeBeforeStart(game) {
+    if (game.ratio) return Promise.resolve(); // games.js already gave a shape
+    var waited = new Promise(function (done) { setTimeout(done, 2000); });
+    return Promise.race([swfSize(encodeURI(game.file)), waited]).then(function (size) {
+      if (!size) return;
+      bezel.style.transition = "none";
+      setRatio(size.w, size.h);
+      void bezel.offsetWidth; // apply now
+      bezel.style.transition = "";
+    });
+  }
+
+  // games.js `urlRewrite`: [[pattern, "/site/path"], ...]. Ruffle sends any
+  // request the game makes whose address matches a pattern to that file on
+  // this site instead (game-stubs/), so calls to long-gone outside services
+  // get the same quick answer every time.
+  function rewriteRules(game) {
+    return game.urlRewrite.map(function (rule) {
+      return [new RegExp(rule[0]), location.origin + rule[1]];
+    });
+  }
+
   function ensurePlayer() {
     if (player) return player;
     player = window.RufflePlayer.newest().createPlayer();
@@ -169,15 +259,37 @@
     // quality: a game's own setting from games.js (lower runs faster).
     var options = Object.assign({ openUrlMode: "deny", contextMenu: "off" }, source,
                                 game && game.quality ? { quality: game.quality } : {},
+                                game && game.urlRewrite ? { urlRewriteRules: rewriteRules(game) } : {},
                                 locked ? { autoplay: "off" } : {});
     var result = ensurePlayer().load(options);
     if (locked) watchForPlay();
+    if (game && game.restartOnLoad && !restartedOnce) restartOnceRunning();
     if (result && result.catch) {
       result.catch(function (err) {
         console.error(err);
         show("Couldn't load " + label + '. <a href="index.html">Pick another game</a>');
       });
     }
+  }
+
+  // games.js `restartOnLoad: true`: for a game that breaks the first time it
+  // starts on a page but reliably works after our Restart button (Red Ball 2:
+  // it reads the stage size the instant it starts, while a brand-new Ruffle
+  // player is still getting going). Once it's actually running (after Play,
+  // for a locked game), restart it once, the same as pressing Restart.
+  var restartedOnce = false, restartWatch = null;
+  function restartOnceRunning() {
+    clearInterval(restartWatch);
+    restartWatch = setInterval(function () {
+      if (restartedOnce) { clearInterval(restartWatch); return; }
+      if (!player || !player.isPlaying) return;
+      clearInterval(restartWatch);
+      setTimeout(function () {
+        if (restartedOnce || !last) return;
+        restartedOnce = true;
+        play(last.source, last.label);
+      }, 800);
+    }, 250);
   }
 
   // Ruffle has no "started playing" event, so check a few times a second
@@ -390,7 +502,8 @@
       show("Loading your saves…");
       var ready = Promise.all([
         window.cloudSaves ? cloudSaves.start() : Promise.resolve(),
-        unlockedHere(game.id)
+        unlockedHere(game.id),
+        sizeBeforeStart(game)
       ]);
       ready.then(function (results) {
         if (results[1] === "blocked") {
