@@ -11,6 +11,8 @@
 //   blurb  optional one-line description on the card
 //   ratio  optional player shape as "width / height". Usually not needed: the
 //          player sizes itself to the game once it loads.
+//   quality optional drawing quality: "low", "medium" or "high" (the default).
+//          Lower turns off edge smoothing, which helps busy games that lag.
 //   mature optional grade level 1-5, written as a number (mature: 3). A mature
 //          game never sits behind the "?" lock: students at that grade or
 //          above (and admins) see it open; everyone else can't see or load it.
@@ -173,12 +175,6 @@ window.GAMES = [
     title: "Fancy Pants Adventures: World 2",
     file: "games/fancy-pants-2.swf",
     blurb: "The Adventures of Fancy Pants Man 2: Electric Boogaloo!"
-  },
-  {
-    id: "fancy-pants-3",
-    title: "Fancy Pants Adventures: World 3",
-    file: "games/fancy-pants-3.swf",
-    blurb: "Fancy Pants Man is back for more."
   },
   {
     id: "fireboy-watergirl-forest-temple",
@@ -412,7 +408,8 @@ window.GAMES = [
     id: "rubble-trouble-moscow",
     title: "Rubble Trouble: Moscow",
     file: "games/rubble-trouble-moscow.swf",
-    blurb: "гул!!! гул!!! гул!!!"
+    blurb: "гул!!! гул!!! гул!!!",
+    quality: "medium" // lags at full quality
   },
   {
     id: "rubble-trouble-new-york",

@@ -153,7 +153,9 @@
     // contextMenu "off": no Ruffle right-click menu (the stage listener above
     // also blocks the browser's own menu).
     // A locked game waits for Ruffle's big Play button; pressing it unlocks.
+    // quality: a game's own setting from games.js (lower runs faster).
     var options = Object.assign({ openUrlMode: "deny", contextMenu: "off" }, source,
+                                game && game.quality ? { quality: game.quality } : {},
                                 locked ? { autoplay: "off" } : {});
     var result = ensurePlayer().load(options);
     if (locked) watchForPlay();

@@ -147,9 +147,12 @@ a:focus-visible, button:focus-visible {
    screen) where Windows had minimize, maximize and close.
    --ar is the game's width / height. play.html sets it from the game file
    once it loads. The window is as wide as the page allows, but never so tall
-   that it runs off the bottom of the screen (--bar-h + 9.25rem leaves room for the page's
-   top and bottom padding and the title bar; 12px is the frame's left and
-   right edges). */
+   that it runs off the bottom of the screen. The game area's height is the
+   screen minus the title bar (--bar-h), the game page's top and bottom
+   padding (1.25rem + 1rem) and the window frame (46px: title bar 30, gap 4,
+   frame padding 8, game border 4); 12px is the frame's left and right
+   edges. Square and tall games are limited by height, so this matters
+   most for them. */
 .bezel {
   --ar: 4 / 3;
   --ar-num: 1.3333;
@@ -158,7 +161,7 @@ a:focus-visible, button:focus-visible {
   --w95-shadow: #808080;
   --w95-dark: #000000;
   margin-inline: auto;
-  width: max(320px, (100vh - var(--bar-h) - 9.25rem) * var(--ar-num) + 12px);
+  width: max(320px, (100vh - var(--bar-h) - 2.25rem - 46px) * var(--ar-num) + 12px);
   max-width: 100%;
   transition: width .2s ease;
 }
@@ -305,6 +308,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .7); }
    the comments would get narrower than 15rem; comments get the rest. On
    narrow screens they stack: game first, comments below. */
 .wrap.wide { max-width: 1500px; }
+body.play { padding-bottom: 1rem; } /* game page: room for a bigger game */
 .play-layout {
   display: flex;
   gap: 1.5rem;
@@ -343,7 +347,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .7); }
   .play-side {
     display: flex;
     flex-direction: column;
-    max-height: calc(100vh - var(--bar-h) - 1.25rem - 3rem);
+    max-height: calc(100vh - var(--bar-h) - 2.25rem);
   }
   .play-side .another-game { flex-shrink: 0; }
   .play-side .community {
