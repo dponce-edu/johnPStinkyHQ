@@ -466,12 +466,6 @@ window.GAMES = [
     blurb: "The original fan-made platform fighter."
   },
   {
-    id: "super-smash-flash-2",
-    title: "Super Smash Flash 2",
-    file: "games/super-smash-flash-2.swf",
-    blurb: "The bigger fan-made sequel."
-  },
-  {
     id: "powerpuff-girls-puppybots",
     title: "The Powerpuff Girls: Attack of the Puppybots",
     file: "games/powerpuff-girls-puppybots.swf",
