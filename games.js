@@ -217,6 +217,12 @@ window.GAMES = [
     blurb: "Design your own dragon."
   },
   {
+    id: "dress-up-bee",
+    title: "Dress Up Bee",
+    file: "games/dress-up-bee.swf",
+    blurb: "Pick outfits and accessories for Bee. By Raimyu."
+  },
+  {
     id: "fancy-pants-1",
     title: "Fancy Pants Adventures: World 1",
     file: "games/fancy-pants-1.swf",
@@ -254,6 +260,12 @@ window.GAMES = [
     scaleToFit: true // draws at a fixed 640 x 501 in the corner otherwise
   },
   {
+    id: "hampsters",
+    title: "Hampsters",
+    file: "games/hampsters.swf",
+    blurb: "A hamster game. Give it a try!"
+  },
+  {
     id: "home-run-derby",
     title: "Home Run Derby",
     file: "games/home-run-derby.swf",
@@ -270,6 +282,23 @@ window.GAMES = [
     title: "Jacksmith",
     file: "games/jacksmith.swf",
     blurb: "Forge weapons for your army, then watch them fight."
+  },
+  {
+    id: "jawbreaker",
+    title: "Jawbreaker",
+    file: "games/jawbreaker.swf",
+    blurb: "Give Jawbreaker a try!",
+    // Its sponsor intro loads orbitPowered/orbitPowered.swf, which didn't come
+    // with the game; answer with an empty one so it doesn't wait for it.
+    urlRewrite: [
+      ["orbitPowered\\.swf$", "/game-stubs/empty.swf"]
+    ]
+  },
+  {
+    id: "junes-museum-ballet",
+    title: "June's Museum Ballet",
+    file: "games/junes-museum-ballet/junes-museum-ballet.swf",
+    blurb: "Dance through the museum with June."
   },
   {
     id: "knuckleheads",
@@ -302,6 +331,12 @@ window.GAMES = [
     blurb: "Draw a track and watch the rider go."
   },
   {
+    id: "lolas-fashion-flurry",
+    title: "Lola's Fashion Flurry",
+    file: "games/lolas-fashion-flurry/lolas-fashion-flurry.swf",
+    blurb: "Help Lola pick what to wear from her closet."
+  },
+  {
     id: "magneboy",
     title: "Magneboy",
     file: "games/magneboy/magneboy.swf",
@@ -312,6 +347,12 @@ window.GAMES = [
     title: "Make a Pusheen",
     file: "games/make-a-pusheen.swf",
     blurb: "Dress up your very own Pusheen cat."
+  },
+  {
+    id: "musical-maze",
+    title: "Musical Maze",
+    file: "games/musical-maze/musical-maze.swf",
+    blurb: "Find your way through the maze and collect the instruments."
   },
   {
     id: "my-new-room",
@@ -499,6 +540,12 @@ window.GAMES = [
     blurb: "Roll, bounce and push your way through each level."
   },
   {
+    id: "rhythm-railroad",
+    title: "Rhythm Railroad",
+    file: "games/rhythm-railroad/rhythm-railroad.swf",
+    blurb: "Keep the beat and keep the train rolling."
+  },
+  {
     id: "riddle-school",
     title: "Riddle School",
     file: "games/riddle-school.swf",
@@ -536,10 +583,26 @@ window.GAMES = [
     blurb: "Run, jump and flip through tunnels in space."
   },
   {
+    id: "samurai-jack",
+    title: "Samurai Jack",
+    file: "games/samurai-jack.swf",
+    blurb: "Fight your way through as Samurai Jack.",
+    // Same missing sponsor intro as Jawbreaker; answer with an empty one.
+    urlRewrite: [
+      ["orbitPowered\\.swf$", "/game-stubs/empty.swf"]
+    ]
+  },
+  {
     id: "skywire",
     title: "Skywire",
     file: "games/skywire.swf",
     blurb: "Get the cable car safely to the end of the line."
+  },
+  {
+    id: "sues-tomato-factory",
+    title: "Sue's Tomato Factory",
+    file: "games/sues-tomato-factory.swf",
+    blurb: "Help Sue keep the tomato factory running."
   },
   {
     id: "super-mario-63",
@@ -615,6 +678,12 @@ window.GAMES = [
     ratio: "4 / 3"
   },
   {
+    id: "warriors-hunting-game",
+    title: "Warriors: Hunting Game",
+    file: "games/warriors-hunting-game.swf",
+    blurb: "Hunt prey through the forest as a Warrior cat."
+  },
+  {
     id: "wolf-maker",
     title: "Wolf Maker",
     file: "games/wolf-maker.swf",
@@ -625,5 +694,12 @@ window.GAMES = [
     title: "Yin Yang",
     file: "games/yin-yang/yin-yang.swf",
     blurb: "Light and dark, two worlds at once."
+  },
+  {
+    id: "zombotron",
+    title: "Zombotron",
+    file: "games/zombotron.swf",
+    blurb: "Blast your way through a planet overrun by zombies and robots.",
+    scaleToFit: true // switches Flash scaling off, like Gravity Guy
   }
 ];
