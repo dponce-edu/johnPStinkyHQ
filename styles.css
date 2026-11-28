@@ -321,6 +321,10 @@ dialog {
 }
 dialog p { margin: 0; }
 dialog::backdrop { background: rgba(0, 0, 0, .7); }
+/* "Wait... a hidden game?" pop-up: gold, like hidden games' windows. */
+dialog.hidden-found { border-color: var(--gold); box-shadow: 0 0 28px rgba(212, 175, 55, .55); }
+.hidden-found-title { font-size: 1.4rem; font-weight: 700; color: var(--gold-bright); }
+.hidden-found button { background: var(--gold); color: #000; }
 
 /* ---------- Player page layout ---------- */
 /* Game window on the left, comments column on the right. The window keeps

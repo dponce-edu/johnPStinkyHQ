@@ -191,6 +191,10 @@
       var blocked = {};
       (data.blocked || []).forEach(function (id) { blocked[id] = true; });
       if (!drawn) games = games.filter(function (g) { return !blocked[g.id]; });
+      // Hidden games this student made visible by pressing "Another Game?".
+      (data.earned || []).forEach(function (g) {
+        if (!drawn && !games.some(function (x) { return x.id === g.id; })) games = games.concat([g]);
+      });
       var set = {};
       data.unlocked.concat(data.open || []).forEach(function (id) { set[id] = true; });
       draw(set, "ce-unlocks-seen:" + data.user, "ce-game-order:" + data.user);

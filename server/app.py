@@ -74,7 +74,8 @@ CREATE TABLE IF NOT EXISTS users (
     proper_name TEXT NOT NULL DEFAULT '',      -- legal/formal name; admins only
     invite_code TEXT,                          -- set until the student joins
     hidden_games INTEGER NOT NULL DEFAULT 0,   -- may see games/hidden/
-    grade_level INTEGER NOT NULL DEFAULT 1     -- 1-5; mature games need at least theirs
+    grade_level INTEGER NOT NULL DEFAULT 1,    -- 1-5; mature games need at least theirs
+    another_game_clicks INTEGER NOT NULL DEFAULT 0  -- lifetime "Another Game?" presses
 );
 CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY,
@@ -173,6 +174,8 @@ def init_db():
         con.execute("ALTER TABLE users ADD COLUMN hidden_games INTEGER NOT NULL DEFAULT 0")
     if "grade_level" not in columns:
         con.execute("ALTER TABLE users ADD COLUMN grade_level INTEGER NOT NULL DEFAULT 1")
+    if "another_game_clicks" not in columns:
+        con.execute("ALTER TABLE users ADD COLUMN another_game_clicks INTEGER NOT NULL DEFAULT 0")
     con.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_by_invite ON users(invite_code)")
     con.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_by_screen_name "
                 "ON users(screen_name COLLATE NOCASE)")
@@ -445,10 +448,17 @@ def _games_in(path):
                 file = re.search(r'\bfile:\s*"([^"]+)"', block)
                 title = re.search(r'\btitle:\s*"((?:[^"\\]|\\.)*)"', block)
                 mature = re.search(r"\bmature:\s*([0-9]+)", block)
+                earn = re.search(r"\banotherGame:\s*([0-9]+)", block)
+                extra = {k: m.group(1) for k in ("blurb", "ratio", "quality")
+                         for m in [re.search(r'\b%s:\s*"((?:[^"\\]|\\.)*)"' % k, block)] if m}
                 games[gid.group(1)] = {
                     "title": title.group(1).replace('\\"', '"') if title else gid.group(1),
                     "file": file.group(1) if file else "",
                     "mature": int(mature.group(1)) if mature else 0,
+                    # Hidden games only: visible to students who've pressed
+                    # "Another Game?" at least this many times (0: never).
+                    "another_game": int(earn.group(1)) if earn else 0,
+                    "extra": extra,
                 }
             cached = _games[path] = (mtime, games)
         return cached[1]
@@ -519,11 +529,23 @@ def grade_allows(user, level):
     return not level or bool(user and (user["is_admin"] or user["grade_level"] >= level))
 
 
+def earned_hidden(user):
+    """{id: info} for hidden games this user has made visible by pressing
+    "Another Game?" enough times (without having hidden-games access)."""
+    if not user or may_see_hidden(user):
+        return {}
+    clicks = user["another_game_clicks"]
+    return {gid: info for gid, info in _games_in(HIDDEN_LIST).items()
+            if info["another_game"] and clicks >= info["another_game"]}
+
+
 def listed_games(user):
     """{id: info} for every game in the lists this user may see, ignoring grade."""
     games = dict(_games_in(PUBLIC_LIST))
     if may_see_hidden(user):
         games.update(_games_in(HIDDEN_LIST))
+    else:
+        games.update(earned_hidden(user))
     return with_settings(games)
 
 
@@ -553,6 +575,16 @@ def file_blocked(lowered, user):
 def is_hidden_path(lowered):
     """lowered: a clean_path()-ed, lower-cased URL path."""
     return lowered == HIDDEN_FOLDER or lowered.startswith(HIDDEN_FOLDER + "/")
+
+
+def hidden_path_allowed(lowered, user):
+    """May this user load this file in games/hidden/? Admins and hidden-games
+    accounts: anything. Others: only the .swf of a hidden game they've earned
+    (never the hidden list itself)."""
+    if may_see_hidden(user):
+        return True
+    return any(clean_path(info["file"]).lower() == lowered
+               for info in earned_hidden(user).values())
 
 
 # ---------------------------------------------------------------- rate limits
@@ -627,6 +659,7 @@ ROUTES = [
     ("GET", r"/api/unlocks", "unlocks"),
     ("POST", r"/api/games/" + GAME_ID + r"/unlock", "unlock"),
     ("POST", r"/api/games/" + GAME_ID + r"/playtime", "playtime"),
+    ("POST", r"/api/another-game", "another_game"),
     ("GET", r"/api/saves", "saves"),
     ("POST", r"/api/saves", "update_saves"),
     # Admin tools page (admin.html). Every one checks the user is an admin.
@@ -754,7 +787,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
                 return
-            if (is_hidden_path(lowered) and not may_see_hidden(user)) or \
+            if (is_hidden_path(lowered) and not hidden_path_allowed(lowered, user)) or \
                     file_blocked(lowered, user):
                 self.send_error(404)
                 return
@@ -909,7 +942,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         user = self.current_user(con)
         if user:
             # Hidden games: a plain "not found" for everyone not allowed.
-            need(not is_hidden_path(lowered) or may_see_hidden(user), 404, "Not found.")
+            need(not is_hidden_path(lowered) or hidden_path_allowed(lowered, user), 404,
+                 "Not found.")
             need(not file_blocked(lowered, user), 404, "Not found.")
             return 200, {"ok": True}
         self.extra_headers.append(("Location", login_redirect(uri)))
@@ -1242,6 +1276,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return 200, {"games": [{
             "id": gid, "hidden": gid in hidden, "mature": info["mature"],
             "listedMature": info["listed_mature"], "disabled": info["disabled"],
+            "anotherGame": info["another_game"],
         } for gid, info in sorted(with_settings(games).items())]}
 
     def api_admin_game_settings(self, con, game):
@@ -1389,11 +1424,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         mature = {gid for gid, info in listed.items() if info["mature"]}
         allowed = game_ids(user)
         blocked = set(listed) - allowed
+        earned = [dict(info["extra"], id=gid, title=info["title"], file=info["file"])
+                  for gid, info in sorted(earned_hidden(user).items()) if gid in allowed]
         return 200, {"user": user["username"], "all": bool(user["is_admin"]),
                      "unlocked": [r["game"] for r in rows
                                   if r["game"] not in mature and r["game"] not in blocked],
                      "open": sorted(mature & allowed),
-                     "blocked": sorted(blocked)}
+                     "blocked": sorted(blocked),
+                     "earned": earned}
 
     def api_playtime(self, con, game):
         """Body: {"seconds": N}, the active seconds since the last report."""
@@ -1416,6 +1454,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         "seconds = seconds + excluded.seconds",
                         (user["id"], game, time.strftime("%Y-%m-%d", time.localtime(now)), counted))
         return 200, {"counted": counted}
+
+    def api_another_game(self, con):
+        """One press of "Another Game?". Counted for students, at most one
+        every 2 seconds. Returns hidden games this press made visible."""
+        user = self.require_user(con, "Log in first.")
+        if user["is_admin"] or not LIMITS.take("another:" + str(user["id"]), 1, 2):
+            return 200, {"counted": False}
+        clicks = user["another_game_clicks"] + 1
+        con.execute("UPDATE users SET another_game_clicks = ? WHERE id = ?", (clicks, user["id"]))
+        # Hidden games this exact press reveals (and that they may play: not
+        # disabled, grade allows), for the "Wait... a hidden game?" pop-up.
+        after = dict(user, another_game_clicks=clicks)
+        playable_now = game_ids(after)
+        newly = [{"id": gid, "title": info["title"]}
+                 for gid, info in sorted(_games_in(HIDDEN_LIST).items())
+                 if info["another_game"] == clicks and not may_see_hidden(user)
+                 and gid in playable_now]
+        return 200, {"counted": True, "clicks": clicks, "earned": newly}
 
     def api_unlock(self, con, game):
         user = self.require_user(con, "Log in first.")
@@ -1740,6 +1796,7 @@ def cmd_list_users(args):
             flags.insert(0, u["proper_name"])
         if not u["is_admin"]:
             flags.append("grade %d" % u["grade_level"])
+            flags.append("%d another-game" % u["another_game_clicks"])
         if u["timeout_until"] > time.time():
             flags.append("timeout until " + until_text(u["timeout_until"]))
         print("%4d  %-20s %s  %s" % (u["id"], u["username"],

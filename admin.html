@@ -386,6 +386,12 @@
       tag.className = "gs-tag";
       tag.textContent = "hidden";
       name.append(" ", tag);
+      if (g.anotherGame) {
+        var earn = document.createElement("span");
+        earn.className = "gs-tag";
+        earn.textContent = "shows after " + g.anotherGame + " Another Game? presses";
+        name.append(" ", earn);
+      }
     }
 
     var sel = document.createElement("select");

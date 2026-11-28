@@ -82,6 +82,16 @@
   </div>
 </div>
 
+<!-- Shown on the "Another Game?" press that reveals a hidden game. -->
+<dialog id="hidden-found" class="hidden-found">
+  <form method="dialog">
+    <p class="hidden-found-title">Wait... a hidden game?</p>
+    <div class="controls">
+      <button value="go" autofocus>Go</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="confirm-restart">
   <form method="dialog">
     <p>Are you sure you want to restart this game?</p>
@@ -200,6 +210,23 @@
   // Also: mature games their grade allows count as unlocked (they never lock),
   // and ones above their grade come back "blocked" and are taken out of
   // window.GAMES so "Another Game?" can't pick them.
+  // Hidden games this student made visible (pressing "Another Game?" enough):
+  // add them to window.GAMES so "Another Game?" can pick them too.
+  function addEarned(list) {
+    (list || []).forEach(function (g) {
+      if (!(window.GAMES || []).some(function (x) { return x.id === g.id; })) window.GAMES.push(g);
+    });
+  }
+  function earnedGames() {
+    return fetch("/api/unlocks", { credentials: "same-origin" }).then(function (res) {
+      var type = res.headers.get("Content-Type") || "";
+      return res.ok && type.indexOf("application/json") !== -1 ? res.json() : null;
+    }).then(function (data) {
+      addEarned(data && data.earned);
+      return (data && data.earned) || [];
+    }).catch(function () { return []; });
+  }
+
   function unlockedHere(gameId) {
     return fetch("/api/unlocks", { credentials: "same-origin" }).then(function (res) {
       var type = res.headers.get("Content-Type") || "";
@@ -209,6 +236,7 @@
       var blocked = data.blocked || [];
       window.GAMES = (window.GAMES || []).filter(function (g) { return blocked.indexOf(g.id) === -1; });
       if (blocked.indexOf(gameId) !== -1) return "blocked";
+      addEarned(data.earned);
       return data.unlocked.indexOf(gameId) !== -1 || (data.open || []).indexOf(gameId) !== -1;
     }).catch(function () { return true; });
   }
@@ -223,7 +251,29 @@
     if (!others.length) return;
     e.preventDefault();
     var pick = others[Math.floor(Math.random() * others.length)];
-    location.href = "play.html?game=" + encodeURIComponent(pick.id);
+    var button = e.currentTarget;
+    button.style.pointerEvents = "none"; // one press at a time
+    function go(gameId) { location.href = "play.html?game=" + encodeURIComponent(gameId); }
+    // Count the press first: the press that reveals a hidden game shows the
+    // "Wait... a hidden game?" pop-up and goes to that game instead. If the
+    // server is slow (or missing), go to the random pick after 1.5 seconds.
+    var done = false;
+    var fallback = setTimeout(function () { done = true; go(pick.id); }, 1500);
+    fetch("/api/another-game", {
+      method: "POST", credentials: "same-origin", keepalive: true,
+      headers: { "Content-Type": "application/json" }, body: "{}"
+    }).then(function (res) { return res.ok ? res.json() : null; })
+      .catch(function () { return null; })
+      .then(function (r) {
+        if (done) return;
+        clearTimeout(fallback);
+        var found = r && r.earned && r.earned[0];
+        if (!found) { go(pick.id); return; }
+        var box = document.getElementById("hidden-found");
+        // Any way of closing it (button, Esc) goes to the hidden game.
+        box.addEventListener("close", function () { go(found.id); });
+        box.showModal();
+      });
   });
   // Admins don't get the button.
   fetch("/api/me", { credentials: "same-origin" }).then(function (res) {
@@ -310,6 +360,15 @@
   });
 
   window.addEventListener("load", function () {
+    // Not in the lists this page loaded? It may be a hidden game this student
+    // earned, which only the server knows about.
+    var found = game || !id ? Promise.resolve() : earnedGames().then(function (list) {
+      game = list.filter(function (g) { return g.id === id; })[0];
+      if (game && /^games\/hidden\//.test(game.file || "")) bezel.classList.add("hidden-game");
+    });
+    found.then(start);
+  });
+  function start() {
     if (game) {
       setTitle("???");
       // Optional override from games.js, used until the game reports its own size.
@@ -339,7 +398,7 @@
     } else {
       show('Choose a game from the <a href="index.html">homepage</a>.');
     }
-  });
+  }
 </script>
 </body>
 </html>
