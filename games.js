@@ -19,6 +19,9 @@
 //          posted, or games rated) can see and play this one hidden game. The
 //          action that reaches it shows a "Wait... a hidden game?" pop-up and
 //          goes to the game.
+//   scaleToFit optional true: always scale the game to fit its window. For a
+//          game that switches Flash's scaling off and draws at a fixed size in
+//          the top-left corner (Gravity Guy), leaving empty space or cutting off.
 //   restartOnLoad optional true: restart the game once, automatically, right
 //          after it first starts. For a game that's broken the first time it
 //          starts on a page but always works after the Restart button.
@@ -221,10 +224,11 @@ window.GAMES = [
     blurb: "Two-player puzzles with mirrors and beams of light."
   },
   {
-    id: "flip-man",
-    title: "Flip Man",
-    file: "games/flip-man.swf",
-    blurb: "Flip that man!"
+    id: "gravity-guy",
+    title: "Gravity Guy",
+    file: "games/gravity-guy.swf",
+    blurb: "Flip that man!",
+    scaleToFit: true // draws at a fixed 640 x 501 in the corner otherwise
   },
   {
     id: "home-run-derby",

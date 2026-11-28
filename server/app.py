@@ -1800,6 +1800,34 @@ def cmd_timeout(args):
         print("%s's timeout is over." % user["username"])
 
 
+def cmd_rename_game(args):
+    """Move everything stored under one game id to another, after renaming a
+    game in games.js: comments, ratings, unlocks, play time, game settings,
+    and saved progress (saves are stored under the game's file path)."""
+    init_db()
+    con = connect()
+    old, new = args.old_id, args.new_id
+    old_file = args.old_file or "games/%s.swf" % old
+    new_file = args.new_file or "games/%s.swf" % new
+    moved = {}
+    # OR IGNORE: if a row already exists under the new id, keep that one.
+    for table in ("comments", "ratings", "unlocks", "play_time", "game_settings"):
+        moved[table] = con.execute("UPDATE OR IGNORE %s SET game = ? WHERE game = ?" % table,
+                                   (new, old)).rowcount
+    moved["saves"] = con.execute(
+        "UPDATE OR IGNORE saves SET key = replace(key, ?, ?) WHERE instr(key, ?) > 0",
+        ("/%s/" % old_file, "/%s/" % new_file, "/%s/" % old_file)).rowcount
+    left = {t: con.execute("SELECT COUNT(*) FROM %s WHERE game = ?" % t, (old,)).fetchone()[0]
+            for t in ("comments", "ratings", "unlocks", "play_time", "game_settings")}
+    con.commit()
+    print("Moved %s to %s:" % (old, new))
+    for table, n in moved.items():
+        print("  %-13s %d" % (table, n))
+    if any(left.values()):
+        print("Left under %s (already existed under %s): %s"
+              % (old, new, ", ".join("%s %d" % kv for kv in left.items() if kv[1])))
+
+
 def cmd_reset_unlocks(args):
     init_db()
     con = connect()
@@ -1904,6 +1932,12 @@ def main():
     ru.add_argument("username")
     ru.add_argument("--game", help="only this game id")
     sub.add_parser("list-users", help="show every account")
+    rg = sub.add_parser("rename-game", help="move a game's comments, ratings, unlocks, play "
+                        "time, settings and saves to a new id, after renaming it in games.js")
+    rg.add_argument("old_id")
+    rg.add_argument("new_id")
+    rg.add_argument("--old-file", help="old .swf path if not games/OLD_ID.swf")
+    rg.add_argument("--new-file", help="new .swf path if not games/NEW_ID.swf")
     sg = sub.add_parser("set-grade", help="set a student's grade level (1-5)")
     sg.add_argument("username")
     sg.add_argument("grade", type=int, choices=GRADES)
@@ -1951,6 +1985,8 @@ def main():
         cmd_timeout(args)
     elif args.command == "reset-unlocks":
         cmd_reset_unlocks(args)
+    elif args.command == "rename-game":
+        cmd_rename_game(args)
     elif args.command == "list-users":
         cmd_list_users(args)
 

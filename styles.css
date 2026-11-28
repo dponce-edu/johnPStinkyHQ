@@ -693,6 +693,20 @@ button:disabled { opacity: .5; cursor: progress; }
   100% { transform: none; }
 }
 .unlock-count { margin: 1.5rem 0 0; color: var(--muted); }
+
+/* "What is this place?" link, pinned to the bottom right of the homepage
+   (the body is a full-height column, so margin-top: auto pushes it down). */
+.page-foot { margin-top: auto; width: 100%; padding-top: 2rem; text-align: right; }
+.page-foot a { font-size: .9rem; color: var(--muted); }
+.page-foot a:hover { color: var(--ink); }
+
+/* ---------- About this Project (about.html) ---------- */
+.about { max-width: 42rem; margin: 0 auto; text-align: left; }
+.about h1 { text-align: center; margin-bottom: 1.5rem; }
+.about h2 { font-size: 1.15rem; margin: 2rem 0 .5rem; }
+.about p { margin: 0 0 1rem; line-height: 1.7; }
+.about .signoff { margin-top: 2rem; text-align: right; color: var(--muted); }
+.about .back-home { display: inline-block; margin-top: 2rem; }
 @media (prefers-reduced-motion: reduce) {
   .thumb .mystery, .card.just-unlocked { animation: none; }
 }

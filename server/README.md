@@ -93,6 +93,7 @@ Run these with `sudo -u clubescapade python3 /srv/club-escapade/site/server/app.
 | `list-users` | Shows every account with its proper name and screen name |
 | `make-admin NAME` / `remove-admin NAME` | Admins can delete anyone's comment |
 | *(admin page)* **Game settings** | Change any game's maturity level, or disable a game for every standard student. Saved in the database, so no file edits; it overrides `mature:` in `games.js` |
+| `rename-game OLD_ID NEW_ID` | After renaming a game's `id` (and its `.swf` to match) in `games.js`, moves its comments, ratings, unlocks, play time, settings and saved progress to the new id. Run it after the new files are on the server. Add `--old-file`/`--new-file` if the `.swf` names don't follow `games/ID.swf` |
 | `set-grade NAME N` | Sets a student's grade level, 1–5 (new accounts start at 1; `invite` and `add-user` also take `--grade N`). Mature games need at least their grade; see `mature` at the top of `games.js`. Also on the admin page |
 | `allow-hidden NAME` / `disallow-hidden NAME` | Lets them see the hidden games (also a checkbox on the admin page). Admins always can |
 | `timeout NAME MINUTES` / `end-timeout NAME` | Logs them out and keeps them off the site for that long (up to 10080, a week) |

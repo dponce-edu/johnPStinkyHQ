@@ -260,6 +260,10 @@
     var options = Object.assign({ openUrlMode: "deny", contextMenu: "off" }, source,
                                 game && game.quality ? { quality: game.quality } : {},
                                 game && game.urlRewrite ? { urlRewriteRules: rewriteRules(game) } : {},
+                                // scaleToFit: fit the game to the window even if it turns
+                                // Flash scaling off or pins itself to a corner.
+                                game && game.scaleToFit ? { scale: "showAll", forceScale: true,
+                                                            salign: "", forceAlign: true } : {},
                                 locked ? { autoplay: "off" } : {});
     var result = ensurePlayer().load(options);
     if (locked) watchForPlay();
