@@ -17,7 +17,7 @@
 <!-- Admin tools. Anyone logged in can load this page, but every request it
      makes is refused by the server unless the account is an admin.
      Sidebar on the left picks which tool shows on the right (#reports,
-     #timeouts, #games, #log in the address, so a refresh stays put).
+     #timeouts, #games, #log, #playtime in the address, so a refresh stays put).
      Invites, hidden-games access, grade levels and per-student unlocks aren't
      on this page for now; the server and command line still have them all
      (see `python3 server/app.py --help`). -->
@@ -33,6 +33,7 @@
       <a class="side-item" href="#games" data-panel="games">Game settings</a>
       <h2 class="side-group">Logs</h2>
       <a class="side-item" href="#log" data-panel="log">Admin log</a>
+      <a class="side-item" href="#playtime" data-panel="playtime">Play time</a>
     </nav>
 
     <main class="admin">
@@ -75,6 +76,18 @@
           <span id="gs-count" class="muted"></span>
         </form>
         <ul id="gs-list" class="game-settings"></ul>
+      </section>
+
+      <section id="panel-playtime" class="admin-panel" hidden>
+        <h2>Play time</h2>
+        <p class="muted">Time students spent with a game running, on screen, and
+          the keyboard or mouse used in the last 3 minutes. Counted per game,
+          about a minute at a time. "7 days" includes today.</p>
+        <h3>By student</h3>
+        <p class="muted">Click a student to see their time in each game.</p>
+        <div id="pt-users" class="pt-table"></div>
+        <h3>By game</h3>
+        <div id="pt-games" class="pt-table"></div>
       </section>
 
       <section id="panel-log" class="admin-panel" hidden>
@@ -189,7 +202,7 @@
 
   // ---- sidebar: one panel at a time, chosen by the address's #name
 
-  var PANELS = ["reports", "timeouts", "games", "log"];
+  var PANELS = ["reports", "timeouts", "games", "log", "playtime"];
   function showPanel() {
     var name = location.hash.slice(1);
     if (PANELS.indexOf(name) === -1) name = "reports";
@@ -201,6 +214,7 @@
       else a.removeAttribute("aria-current");
     });
     say("");
+    if (name === "playtime") loadPlaytime();
   }
   window.addEventListener("hashchange", showPanel);
   function goTo(name) {
@@ -455,6 +469,80 @@
       }).forEach(function (g) { gsList.append(gameRow(g)); });
       filterGames();
     });
+  }
+
+  // ---- play time
+
+  function duration(seconds) {
+    if (!seconds) return "–";
+    var m = Math.round(seconds / 60);
+    if (m < 1) return "<1m";
+    var h = Math.floor(m / 60);
+    return h ? h + "h " + (m % 60) + "m" : m + "m";
+  }
+
+  // One row: a name cell, then Today / 7 days / All time (and an extra cell).
+  function ptRow(tag, name, r, extra) {
+    var row = document.createElement(tag);
+    row.className = "pt-row";
+    var n = document.createElement("span");
+    n.className = "pt-name";
+    n.append(name);
+    row.append(n);
+    [r.today, r.week, r.total].forEach(function (v) {
+      var c = document.createElement("span");
+      c.className = "pt-num";
+      c.textContent = duration(v);
+      row.append(c);
+    });
+    var x = document.createElement("span");
+    x.className = "pt-num pt-extra";
+    x.textContent = extra || "";
+    row.append(x);
+    return row;
+  }
+  function ptHead(first, extra) {
+    var h = ptRow("div", first, {}, extra);
+    h.classList.add("pt-head");
+    h.querySelectorAll(".pt-num").forEach(function (c, i) {
+      c.textContent = ["Today", "7 days", "All time", extra || ""][i];
+    });
+    return h;
+  }
+  function ptEmpty(el) {
+    var p = document.createElement("p");
+    p.className = "empty";
+    p.textContent = "No play time recorded yet.";
+    el.append(p);
+  }
+
+  function loadPlaytime() {
+    return api("GET", "/api/admin/playtime").then(function (data) {
+      var usersEl = document.getElementById("pt-users");
+      var gamesEl = document.getElementById("pt-games");
+      usersEl.replaceChildren();
+      gamesEl.replaceChildren();
+      if (!data.users.length) { ptEmpty(usersEl); ptEmpty(gamesEl); return; }
+
+      usersEl.append(ptHead("Student", "Grade"));
+      data.users.forEach(function (u) {
+        var d = document.createElement("details");
+        d.className = "pt-student";
+        d.append(ptRow("summary", shown(u), u, "Grade " + u.grade));
+        u.games.forEach(function (g) {
+          var r = ptRow("div", title(g.id) !== g.id ? title(g.id) : g.title, g);
+          r.classList.add("pt-sub");
+          d.append(r);
+        });
+        usersEl.append(d);
+      });
+
+      gamesEl.append(ptHead("Game", "Players"));
+      data.games.forEach(function (g) {
+        gamesEl.append(ptRow("div", title(g.id) !== g.id ? title(g.id) : g.title, g,
+                             g.players + (g.players === 1 ? " student" : " students")));
+      });
+    }).catch(fail);
   }
 
   // ---- admin log

@@ -597,6 +597,31 @@ button:disabled { opacity: .5; cursor: progress; }
 .admin .timeout-form { justify-content: flex-start; }
 .admin-sidebar .side-group { margin-top: 1rem; }
 .admin-log li { padding: .45rem .8rem; }
+/* Play time tables: name, then Today / 7 days / All time and an extra column. */
+.pt-table { margin: .5rem 0 1.5rem; border: 2px solid var(--bezel); background: rgba(0, 0, 0, .85); }
+.pt-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(3, 6rem) 7rem;
+  gap: .5rem;
+  align-items: center;
+  padding: .4rem .75rem;
+  border-top: 1px solid rgba(0, 102, 0, .6);
+}
+.pt-head { border-top: 0; color: var(--muted); font-size: .85rem; }
+.pt-num { text-align: right; font-variant-numeric: tabular-nums; }
+.pt-extra { color: var(--muted); font-size: .85rem; }
+.pt-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pt-student summary { cursor: pointer; list-style: none; }
+.pt-student summary::-webkit-details-marker { display: none; }
+.pt-student summary .pt-name::before { content: "▸ "; color: var(--muted); }
+.pt-student[open] summary .pt-name::before { content: "▾ "; }
+.pt-student[open] summary { font-weight: 700; }
+.pt-sub { color: var(--muted); padding-left: 2rem; font-size: .9rem; }
+.pt-table > .empty { margin: 0; padding: .6rem .75rem; }
+@media (max-width: 760px) {
+  .pt-row { grid-template-columns: minmax(0, 1fr) repeat(3, 4.2rem); font-size: .85rem; }
+  .pt-extra { display: none; }
+}
 .game-settings { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: .35rem; }
 .game-settings li {
   display: grid;

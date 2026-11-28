@@ -118,6 +118,15 @@ CREATE TABLE IF NOT EXISTS game_settings (
     mature   INTEGER,
     disabled INTEGER NOT NULL DEFAULT 0
 );
+-- Time spent playing, per student, per game, per day (the server's local
+-- date). The game page reports active minutes; see api_playtime.
+CREATE TABLE IF NOT EXISTS play_time (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    game    TEXT NOT NULL,
+    day     TEXT NOT NULL,             -- YYYY-MM-DD
+    seconds INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, game, day)
+);
 -- What admins did on the admin page (Admin log), newest last.
 CREATE TABLE IF NOT EXISTS admin_log (
     id       INTEGER PRIMARY KEY,
@@ -580,6 +589,15 @@ class Limiter:
 
 LIMITS = Limiter()
 
+# Play time. The game page sends the seconds of active play since its last
+# report, about once a minute. The server never credits more than the time
+# that has really passed since it last credited this student (any game, any
+# tab), and at most PLAY_REPORT_MAX per report, so several tabs or replayed
+# reports can't add up to more than real time.
+PLAY_REPORT_MAX = 75
+_last_play = {}  # user id -> time of the last credited report
+_last_play_lock = threading.Lock()
+
 
 class ApiError(Exception):
     def __init__(self, status, message):
@@ -608,6 +626,7 @@ ROUTES = [
     ("POST", r"/api/comments/(\d+)/report", "report_comment"),
     ("GET", r"/api/unlocks", "unlocks"),
     ("POST", r"/api/games/" + GAME_ID + r"/unlock", "unlock"),
+    ("POST", r"/api/games/" + GAME_ID + r"/playtime", "playtime"),
     ("GET", r"/api/saves", "saves"),
     ("POST", r"/api/saves", "update_saves"),
     # Admin tools page (admin.html). Every one checks the user is an admin.
@@ -621,6 +640,7 @@ ROUTES = [
     ("POST", r"/api/admin/grade", "admin_grade"),
     ("GET", r"/api/admin/games", "admin_games"),
     ("GET", r"/api/admin/log", "admin_log"),
+    ("GET", r"/api/admin/playtime", "admin_playtime"),
     ("POST", r"/api/admin/games/" + GAME_ID, "admin_game_settings"),
     ("GET", r"/api/admin/invites", "admin_invites"),
     ("POST", r"/api/admin/invites", "admin_add_invite"),
@@ -1175,6 +1195,36 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         need(not user["is_admin"], 400, "Admins can already play every game.")
         return user
 
+    def api_admin_playtime(self, con):
+        """Play time per student and per game: today, the last 7 days, all time."""
+        self.require_admin(con)
+        today = time.strftime("%Y-%m-%d")
+        week = time.strftime("%Y-%m-%d", time.localtime(time.time() - 6 * 86400))
+        sums = ("SUM(CASE WHEN p.day = :today THEN p.seconds ELSE 0 END) AS today, "
+                "SUM(CASE WHEN p.day >= :week THEN p.seconds ELSE 0 END) AS week, "
+                "SUM(p.seconds) AS total")
+        args = {"today": today, "week": week}
+        users = {}
+        for r in con.execute("SELECT u.*, p.game, " + sums + " FROM play_time p "
+                             "JOIN users u ON u.id = p.user_id GROUP BY p.user_id, p.game", args):
+            u = users.setdefault(r["id"], {
+                "name": r["username"], "adminName": admin_name(r), "grade": r["grade_level"],
+                "today": 0, "week": 0, "total": 0, "games": []})
+            for k in ("today", "week", "total"):
+                u[k] += r[k]
+            u["games"].append({"id": r["game"], "title": game_title(r["game"]),
+                               "today": r["today"], "week": r["week"], "total": r["total"]})
+        for u in users.values():
+            u["games"].sort(key=lambda g: -g["total"])
+        games = [{"id": r["game"], "title": game_title(r["game"]), "today": r["today"],
+                  "week": r["week"], "total": r["total"], "players": r["players"]}
+                 for r in con.execute("SELECT p.game, " + sums + ", COUNT(DISTINCT p.user_id) "
+                                      "AS players FROM play_time p GROUP BY p.game "
+                                      "ORDER BY total DESC", args)]
+        return 200, {"today": today,
+                     "users": sorted(users.values(), key=lambda u: -u["total"]),
+                     "games": games}
+
     def api_admin_log(self, con):
         """The 300 newest Admin log lines, newest first."""
         self.require_admin(con)
@@ -1344,6 +1394,28 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                   if r["game"] not in mature and r["game"] not in blocked],
                      "open": sorted(mature & allowed),
                      "blocked": sorted(blocked)}
+
+    def api_playtime(self, con, game):
+        """Body: {"seconds": N}, the active seconds since the last report."""
+        user = self.require_user(con, "Log in first.")
+        self.check_game(game, user)
+        if user["is_admin"]:
+            return 200, {"counted": 0}  # only students' time is tracked
+        seconds = self.json_body().get("seconds")
+        need(isinstance(seconds, (int, float)) and not isinstance(seconds, bool)
+             and seconds >= 0, 400, "Bad play time.")
+        now = time.time()
+        with _last_play_lock:
+            since = now - _last_play.get(user["id"], 0)
+            counted = int(min(seconds, PLAY_REPORT_MAX, since))
+            if counted > 0:
+                _last_play[user["id"]] = now
+        if counted > 0:
+            con.execute("INSERT INTO play_time (user_id, game, day, seconds) VALUES (?, ?, ?, ?) "
+                        "ON CONFLICT (user_id, game, day) DO UPDATE SET "
+                        "seconds = seconds + excluded.seconds",
+                        (user["id"], game, time.strftime("%Y-%m-%d", time.localtime(now)), counted))
+        return 200, {"counted": counted}
 
     def api_unlock(self, con, game):
         user = self.require_user(con, "Log in first.")

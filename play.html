@@ -250,6 +250,43 @@
     if (e.target === confirmBox) confirmBox.close(); // clicked the dimmed backdrop
   });
 
+  // ---- Play time. Every 5 seconds, counts 5 seconds of play if the game is
+  // running (not locked or loading), this tab is on screen, and the player
+  // has touched the keyboard, mouse or screen in the last 3 minutes. Sends
+  // the count to the server about once a minute, and when leaving the page.
+  // The server (api_playtime) caps it to real time.
+  var TICK = 5, IDLE_AFTER = 3 * 60 * 1000, REPORT_EVERY = 60;
+  var lastInput = Date.now(), activeSeconds = 0, sinceReport = 0;
+  ["keydown", "pointerdown", "pointermove", "wheel", "touchstart"].forEach(function (type) {
+    window.addEventListener(type, function () { lastInput = Date.now(); },
+                            { capture: true, passive: true });
+  });
+  function reportPlay() {
+    if (!activeSeconds || !game) return;
+    var seconds = activeSeconds;
+    activeSeconds = 0;
+    sinceReport = 0;
+    fetch("/api/games/" + encodeURIComponent(game.id) + "/playtime", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ seconds: seconds }),
+      keepalive: true // still sent while the page is closing
+    }).catch(function () { /* no server (e.g. GitHub Pages): not tracked */ });
+  }
+  setInterval(function () {
+    var playing = game && !locked && player && player.isPlaying &&
+                  document.visibilityState === "visible" &&
+                  Date.now() - lastInput < IDLE_AFTER;
+    if (playing) activeSeconds += TICK;
+    sinceReport += TICK;
+    if (sinceReport >= REPORT_EVERY) reportPlay();
+  }, TICK * 1000);
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") reportPlay();
+  });
+  window.addEventListener("pagehide", reportPlay);
+
   // Mute: remembered across games and visits on this computer.
   var muteBtn = document.getElementById("mute");
   var muted = false;
