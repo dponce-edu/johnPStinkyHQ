@@ -19,7 +19,8 @@
        first claim on the width; comments take what's left. -->
   <div class="play-layout">
   <!-- The game sits in a Windows 95-style window. The title bar shows the
-       game's name; its buttons are mute, restart and full screen. -->
+       game's name; its buttons are mute and restart (full screen is there
+       but hidden). -->
   <main class="bezel win95">
     <div class="win95-titlebar">
       <h1 id="title" class="win95-title">Flash Player</h1>
@@ -40,7 +41,9 @@
             <path d="M6 0.6l3.6 0.4-0.6 3.6z"/>
           </svg>
         </button>
-        <button id="full" class="win95-btn" type="button" title="Full screen" aria-label="Full screen">
+        <!-- Full screen: switched off for now. Remove "hidden" to bring it back;
+             its code below still works. -->
+        <button id="full" class="win95-btn" type="button" title="Full screen" aria-label="Full screen" hidden>
           <svg viewBox="0 0 10 10" aria-hidden="true">
             <path d="M0 0h10v10H0zM1 2v7h8V2z"/>
           </svg>
