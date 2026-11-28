@@ -757,7 +757,7 @@ CSP = "; ".join([
 
 # The only files anyone can load without logging in: the log-in page and what
 # it needs. In production Caddy asks /api/auth-check about every request.
-PUBLIC_PATHS = ("/login.html", "/join.html", "/pinpad.js", "/styles.css", "/background.jpg")
+PUBLIC_PATHS = ("/login.html", "/join.html", "/pinpad.js", "/styles.css", "/background.jpg", "/favicon.ico")
 
 
 def clean_path(path):
